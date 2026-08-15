@@ -1,0 +1,447 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { addDays, addMonths, addWeeks } from "date-fns";
+import { db } from "@/lib/db";
+import { getDirectorContext } from "@/lib/director";
+import { saveUploadedFile } from "@/lib/storage";
+import { checkAndUnlockAchievements } from "@/lib/achievements";
+import type { Event } from "@prisma/client";
+
+export type ActionState = { error: string | null };
+
+function combineDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}`);
+}
+
+export async function createEventAction(clubId: string, formData: FormData): Promise<ActionState> {
+  const { club } = await getDirectorContext(clubId);
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const category = String(formData.get("category") ?? "Meeting");
+  const date = String(formData.get("date") ?? "");
+  const startTime = String(formData.get("startTime") ?? "15:00");
+  const endTime = String(formData.get("endTime") ?? "16:00");
+  const building = String(formData.get("building") ?? "").trim() || null;
+  const room = String(formData.get("room") ?? "").trim() || null;
+  const address = String(formData.get("address") ?? "").trim() || null;
+  const mapLink = String(formData.get("mapLink") ?? "").trim() || null;
+  const maxParticipantsRaw = String(formData.get("maxParticipants") ?? "").trim();
+  const registrationDeadlineRaw = String(formData.get("registrationDeadline") ?? "").trim();
+  const waitlistEnabled = formData.get("waitlistEnabled") === "on";
+  const awardsServiceHours = formData.get("awardsServiceHours") === "on";
+  const defaultServiceHours = Number(formData.get("defaultServiceHours") ?? 0);
+  const serviceTaskDescription = String(formData.get("serviceTaskDescription") ?? "").trim() || null;
+  const attendanceEnabled = formData.get("attendanceEnabled") === "on";
+  const visibility = String(formData.get("visibility") ?? "PUBLIC") as "PUBLIC" | "PRIVATE";
+  const inviteUserIds = formData.getAll("inviteUserIds").map(String);
+  // Assigned students are auto-registered with no Join needed. If the event
+  // is Private, they also need to be able to see it — union them into the
+  // invite list so a director doesn't have to pick the same people twice.
+  const assignedUserIds = formData.getAll("assignedUserIds").map(String);
+  const allInviteIds = Array.from(new Set([...inviteUserIds, ...assignedUserIds]));
+  const recurrence = String(formData.get("recurrence") ?? "NONE") as "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+  const recurrenceUntilRaw = String(formData.get("recurrenceUntil") ?? "").trim();
+  const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
+  const attachmentFiles = formData.getAll("attachments").filter((f): f is File => f instanceof File && f.size > 0);
+  // Parallel arrays (index-matched) — see the "Roles" section of the create form.
+  const roleNames = formData.getAll("roleName").map(String);
+  const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
+  const roles = roleNames
+    .map((name, i) => ({ name: name.trim(), capacity: roleCapacities[i] }))
+    .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
+
+  if (!title || !description || !date) return { error: "Title, description, and date are required." };
+
+  const savedAttachments: { filename: string; url: string; mimeType: string; size: number }[] = [];
+  for (const file of attachmentFiles) {
+    try {
+      savedAttachments.push(await saveUploadedFile(file, "attachments"));
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "One of the attachments failed to upload." };
+    }
+  }
+
+  const startAt = combineDateTime(date, startTime);
+  const endAt = combineDateTime(date, endTime);
+  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: "Invalid date or time." };
+
+  const occurrences: Date[] = [startAt];
+  if (recurrence !== "NONE" && recurrenceUntilRaw) {
+    const until = new Date(`${recurrenceUntilRaw}T23:59:59`);
+    let cursor = startAt;
+    const step = recurrence === "DAILY" ? (d: Date) => addDays(d, 1) : recurrence === "WEEKLY" ? (d: Date) => addWeeks(d, 1) : (d: Date) => addMonths(d, 1);
+    while (occurrences.length < 52) {
+      cursor = step(cursor);
+      if (cursor > until) break;
+      occurrences.push(cursor);
+    }
+  }
+  const duration = endAt.getTime() - startAt.getTime();
+
+  let parentId: string | null = null;
+  for (const occStart of occurrences) {
+    const occEnd = new Date(occStart.getTime() + duration);
+    const created: Event = await db.event.create({
+      data: {
+        clubId,
+        title,
+        description,
+        category,
+        startAt: occStart,
+        endAt: occEnd,
+        building,
+        room,
+        address,
+        mapLink,
+        visibility,
+        allowedGrades,
+        maxParticipants: maxParticipantsRaw ? Number(maxParticipantsRaw) : null,
+        registrationDeadline: registrationDeadlineRaw ? new Date(registrationDeadlineRaw) : null,
+        waitlistEnabled,
+        awardsServiceHours,
+        defaultServiceHours: awardsServiceHours ? defaultServiceHours : 0,
+        serviceTaskDescription,
+        attendanceEnabled,
+        recurrence,
+        recurrenceParentId: parentId,
+        recurrenceUntil: recurrenceUntilRaw ? new Date(recurrenceUntilRaw) : null,
+        createdById: club.createdById,
+        invites: visibility === "PRIVATE" ? { create: allInviteIds.map((userId) => ({ userId })) } : undefined,
+        attachments: savedAttachments.length ? { create: savedAttachments } : undefined,
+        registrations: assignedUserIds.length ? { create: assignedUserIds.map((userId) => ({ userId, status: "REGISTERED" as const })) } : undefined,
+        roles: roles.length ? { create: roles.map((r, i) => ({ name: r.name, capacity: r.capacity, order: i })) } : undefined,
+      },
+    });
+    if (!parentId) parentId = created.id;
+  }
+
+  if (assignedUserIds.length > 0 && parentId) {
+    await db.notification.createMany({
+      data: assignedUserIds.map((userId) => ({
+        userId,
+        type: "REGISTRATION" as const,
+        title: "You've been assigned to an event",
+        body: title,
+        linkUrl: `/events/${parentId}`,
+      })),
+    });
+  }
+
+  revalidatePath(`/director/${clubId}/events`);
+  revalidatePath(`/director/${clubId}`);
+  revalidatePath("/calendar");
+  redirect(`/director/${clubId}/events`);
+}
+
+export async function updateEventAction(eventId: string, formData: FormData): Promise<ActionState> {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const date = String(formData.get("date") ?? "");
+  const startTime = String(formData.get("startTime") ?? "15:00");
+  const endTime = String(formData.get("endTime") ?? "16:00");
+
+  if (!title || !description || !date) return { error: "Title, description, and date are required." };
+
+  await db.event.update({
+    where: { id: eventId },
+    data: {
+      title,
+      description,
+      category: String(formData.get("category") ?? event.category),
+      startAt: combineDateTime(date, startTime),
+      endAt: combineDateTime(date, endTime),
+      building: String(formData.get("building") ?? "").trim() || null,
+      room: String(formData.get("room") ?? "").trim() || null,
+      address: String(formData.get("address") ?? "").trim() || null,
+      maxParticipants: String(formData.get("maxParticipants") ?? "").trim() ? Number(formData.get("maxParticipants")) : null,
+      waitlistEnabled: formData.get("waitlistEnabled") === "on",
+      awardsServiceHours: formData.get("awardsServiceHours") === "on",
+      defaultServiceHours: formData.get("awardsServiceHours") === "on" ? Number(formData.get("defaultServiceHours") ?? 0) : 0,
+      serviceTaskDescription: String(formData.get("serviceTaskDescription") ?? "").trim() || null,
+      attendanceEnabled: formData.get("attendanceEnabled") === "on",
+    },
+  });
+
+  // Adding newly-assigned students here — never removing. Un-assigning goes
+  // through the existing "Remove" control in the Registrants list instead,
+  // so this can't accidentally kick someone who self-joined off the event.
+  const assignedUserIds = formData.getAll("assignedUserIds").map(String);
+  const newlyAssigned: string[] = [];
+  for (const userId of assignedUserIds) {
+    const existing = await db.eventRegistration.findUnique({ where: { eventId_userId: { eventId, userId } } });
+    if (!existing) newlyAssigned.push(userId);
+    await db.eventRegistration.upsert({
+      where: { eventId_userId: { eventId, userId } },
+      update: {},
+      create: { eventId, userId, status: "REGISTERED" },
+    });
+  }
+  if (newlyAssigned.length > 0) {
+    await db.notification.createMany({
+      data: newlyAssigned.map((userId) => ({
+        userId,
+        type: "REGISTRATION" as const,
+        title: "You've been assigned to an event",
+        body: title,
+        linkUrl: `/events/${eventId}`,
+      })),
+    });
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  revalidatePath(`/director/${event.clubId}/events`);
+  return { error: null };
+}
+
+export async function cancelEventAction(eventId: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+  await db.event.update({ where: { id: eventId }, data: { status: "CANCELLED" } });
+
+  const registrants = await db.eventRegistration.findMany({ where: { eventId, status: "REGISTERED" } });
+  await db.notification.createMany({
+    data: registrants.map((r) => ({
+      userId: r.userId,
+      type: "REGISTRATION" as const,
+      title: "Event cancelled",
+      body: event.title,
+      linkUrl: `/events/${eventId}`,
+    })),
+  });
+
+  revalidatePath(`/director/${event.clubId}/events`);
+  revalidatePath("/calendar");
+}
+
+export async function markEventCompletedAction(eventId: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+  await db.event.update({ where: { id: eventId }, data: { status: "COMPLETED" } });
+  revalidatePath(`/director/${event.clubId}/events`);
+}
+
+export async function finalizeEventAction(
+  eventId: string,
+  eventImpact: string,
+  hoursByUser: Record<string, number>
+): Promise<ActionState> {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  const { user } = await getDirectorContext(event.clubId);
+
+  const entries = Object.entries(hoursByUser).filter(([, hours]) => hours > 0);
+
+  await db.$transaction(async (tx) => {
+    for (const [userId, hours] of entries) {
+      const existing = await tx.serviceHourRecord.findFirst({ where: { eventId, userId } });
+      if (existing) {
+        await tx.serviceHourRecord.update({
+          where: { id: existing.id },
+          data: { hours, status: "VERIFIED", approvedById: user.id, approvedAt: new Date(), eventImpact: eventImpact || null },
+        });
+      } else {
+        await tx.serviceHourRecord.create({
+          data: {
+            userId,
+            clubId: event.clubId,
+            eventId,
+            hours,
+            status: "VERIFIED",
+            approvedById: user.id,
+            approvedAt: new Date(),
+            taskDescription: event.serviceTaskDescription,
+            eventImpact: eventImpact || null,
+          },
+        });
+      }
+    }
+    await tx.eventRegistration.updateMany({
+      where: { eventId, userId: { in: entries.map(([id]) => id) } },
+      data: { status: "ATTENDED" },
+    });
+    await tx.event.update({ where: { id: eventId }, data: { status: "FINALIZED", eventImpact: eventImpact || null } });
+  });
+
+  for (const [userId] of entries) {
+    await checkAndUnlockAchievements(userId);
+    await db.notification.create({
+      data: {
+        userId,
+        type: "SERVICE_HOURS",
+        title: "Service hours verified",
+        body: `${event.title} — ${hoursByUser[userId]} hours`,
+        linkUrl: "/service-hours",
+      },
+    });
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  revalidatePath(`/director/${event.clubId}/events`);
+  revalidatePath(`/director/${event.clubId}`);
+  return { error: null };
+}
+
+export async function directorRemoveRegistrantAction(eventId: string, userId: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+
+  await db.eventRegistration.updateMany({ where: { eventId, userId }, data: { status: "CANCELLED" } });
+  await db.notification.create({
+    data: {
+      userId,
+      type: "REGISTRATION",
+      title: "Removed from event",
+      body: event.title,
+      linkUrl: `/events/${eventId}`,
+    },
+  });
+
+  // Promote the earliest waitlisted registrant, if any and if there's now room.
+  if (event.maxParticipants) {
+    const activeCount = await db.eventRegistration.count({ where: { eventId, status: "REGISTERED" } });
+    if (activeCount < event.maxParticipants) {
+      const nextWaitlisted = await db.eventRegistration.findFirst({ where: { eventId, status: "WAITLISTED" }, orderBy: { registeredAt: "asc" } });
+      if (nextWaitlisted) {
+        await db.eventRegistration.update({ where: { id: nextWaitlisted.id }, data: { status: "REGISTERED" } });
+        await db.notification.create({
+          data: { userId: nextWaitlisted.userId, type: "REGISTRATION", title: "You're off the waitlist!", body: event.title, linkUrl: `/events/${eventId}` },
+        });
+      }
+    }
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  revalidatePath(`/events/${eventId}`);
+}
+
+export async function addChecklistItemAction(eventId: string, task: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+  const count = await db.eventChecklistItem.count({ where: { eventId } });
+  await db.eventChecklistItem.create({ data: { eventId, task, order: count } });
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+}
+
+export async function toggleChecklistItemAction(itemId: string) {
+  const item = await db.eventChecklistItem.findUniqueOrThrow({ where: { id: itemId }, include: { event: true } });
+  await getDirectorContext(item.event.clubId);
+  await db.eventChecklistItem.update({ where: { id: itemId }, data: { completed: !item.completed } });
+  revalidatePath(`/director/${item.event.clubId}/events/${item.eventId}`);
+}
+
+export async function deleteChecklistItemAction(itemId: string) {
+  const item = await db.eventChecklistItem.findUniqueOrThrow({ where: { id: itemId }, include: { event: true } });
+  await getDirectorContext(item.event.clubId);
+  await db.eventChecklistItem.delete({ where: { id: itemId } });
+  revalidatePath(`/director/${item.event.clubId}/events/${item.eventId}`);
+}
+
+export async function uploadEventAttachmentAction(eventId: string, formData: FormData): Promise<ActionState> {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file to upload." };
+
+  try {
+    const saved = await saveUploadedFile(file, "attachments");
+    await db.eventAttachment.create({
+      data: { eventId, filename: saved.filename, url: saved.url, mimeType: saved.mimeType, size: saved.size },
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Upload failed." };
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  return { error: null };
+}
+
+export async function deleteEventAttachmentAction(attachmentId: string) {
+  const attachment = await db.eventAttachment.findUniqueOrThrow({ where: { id: attachmentId }, include: { event: true } });
+  await getDirectorContext(attachment.event.clubId);
+  await db.eventAttachment.delete({ where: { id: attachmentId } });
+  revalidatePath(`/director/${attachment.event.clubId}/events/${attachment.eventId}`);
+}
+
+// Marks one registrant Attended or Not Attended on the Attendance page.
+// Attended + awardsServiceHours auto-creates/restores a VERIFIED
+// ServiceHourRecord at the event's default hours; un-marking removes it —
+// this stays in sync automatically per the spec ("saved automatically").
+export async function markAttendanceAction(eventId: string, userId: string, attended: boolean) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  const { user } = await getDirectorContext(event.clubId);
+
+  await db.eventRegistration.updateMany({
+    where: { eventId, userId },
+    data: { status: attended ? "ATTENDED" : "NO_SHOW" },
+  });
+
+  if (attended && event.awardsServiceHours) {
+    const existing = await db.serviceHourRecord.findFirst({ where: { eventId, userId } });
+    if (existing) {
+      await db.serviceHourRecord.update({
+        where: { id: existing.id },
+        data: { hours: event.defaultServiceHours, status: "VERIFIED", approvedById: user.id, approvedAt: new Date() },
+      });
+    } else {
+      await db.serviceHourRecord.create({
+        data: {
+          userId,
+          clubId: event.clubId,
+          eventId,
+          hours: event.defaultServiceHours,
+          status: "VERIFIED",
+          approvedById: user.id,
+          approvedAt: new Date(),
+          taskDescription: event.serviceTaskDescription,
+        },
+      });
+    }
+    await checkAndUnlockAchievements(userId);
+  } else if (!attended) {
+    await db.serviceHourRecord.deleteMany({ where: { eventId, userId } });
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
+  revalidatePath(`/director/${event.clubId}/attendance`);
+  revalidatePath("/service-hours");
+}
+
+export async function updateAttendanceHoursAction(eventId: string, userId: string, hours: number) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  const { user } = await getDirectorContext(event.clubId);
+  if (!Number.isFinite(hours) || hours < 0) return;
+
+  const existing = await db.serviceHourRecord.findFirst({ where: { eventId, userId } });
+  if (existing) {
+    await db.serviceHourRecord.update({ where: { id: existing.id }, data: { hours } });
+  } else {
+    await db.serviceHourRecord.create({
+      data: {
+        userId,
+        clubId: event.clubId,
+        eventId,
+        hours,
+        status: "VERIFIED",
+        approvedById: user.id,
+        approvedAt: new Date(),
+        taskDescription: event.serviceTaskDescription,
+      },
+    });
+  }
+  await checkAndUnlockAchievements(userId);
+  revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
+  revalidatePath("/service-hours");
+}
+
+export async function updateAttendanceNoteAction(eventId: string, userId: string, note: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+  await db.eventRegistration.updateMany({ where: { eventId, userId }, data: { attendanceNote: note.trim() || null } });
+  revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
+}

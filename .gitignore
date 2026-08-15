@@ -36,6 +36,16 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local file storage & database
+/public/uploads
+/prisma/dev.db
+/prisma/dev.db-journal
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# stray Claude Code session transcripts / orphaned local memory notes —
+# not part of the app, shouldn't live in the repo
+*.jsonl
+/memory/

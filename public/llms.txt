@@ -1,0 +1,13 @@
+# ClubSync
+
+> ClubSync is the home for a student's extracurricular life — clubs, events, and verified service hours in one place.
+
+ClubSync is a school-focused platform where students discover and join clubs, register for club events, and track verified community-service hours. Club directors manage rosters, events, attendance, and announcements; school administrators oversee clubs and users across the platform.
+
+Almost all content in ClubSync is private to a signed-in student, club director, or school administrator — there is no public content to summarize beyond the marketing pages linked below.
+
+## Public pages
+
+- [Welcome](/welcome): overview of what ClubSync does
+- [Log In](/login)
+- [Sign Up](/signup)

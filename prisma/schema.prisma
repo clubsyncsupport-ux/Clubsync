@@ -1,0 +1,454 @@
+// ClubSync database schema.
+//
+// Runs on local SQLite today. To migrate to PostgreSQL later:
+//   1. Change `provider = "sqlite"` to `provider = "postgresql"` below.
+//   2. Point DATABASE_URL (in .env) at a Postgres connection string.
+//   3. Run `npx prisma migrate dev`.
+// No application code needs to change — everything goes through
+// src/lib/db.ts, and Prisma generates the same client API for both.
+//
+// String fields commented "enum-like" hold one of a fixed set of values
+// (see src/lib/constants.ts for the TS union types). Plain strings are used
+// instead of Prisma `enum` because the SQLite connector doesn't support them;
+// switching to Postgres later would let us upgrade these to real enums if desired.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Accounts ----------
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String? // null if account was created via a future external auth provider
+  firstName         String
+  lastName          String
+  avatarUrl         String?
+  bio               String?
+
+  // platformRole: "STUDENT" | "SCHOOL_ADMIN" | "PLATFORM_ADMIN" — separate from
+  // club-level roles below. SCHOOL_ADMIN manages exactly one school, pointed to
+  // by schoolAdminOfId (distinct from schoolId, which is this person's own
+  // student/staff school — a School Admin need not have a profile there at all).
+  platformRole      String   @default("STUDENT")
+  // accountStatus: "ACTIVE" | "SUSPENDED"
+  accountStatus     String   @default("ACTIVE")
+  // accountKind: "STUDENT" | "STAFF" — STAFF is for a sponsor teacher / club-only
+  // account that signed up directly as a Club Director. It has no grade and no
+  // "Student" profile — its entire experience is the director dashboard(s) it owns.
+  // A student who later creates a club via "+ Create Club" stays accountKind STUDENT
+  // and simply gains an extra director profile alongside their student one.
+  accountKind       String   @default("STUDENT")
+
+  grade             String?
+  schoolId          String?
+  school            School?  @relation(fields: [schoolId], references: [id])
+
+  // Set only when platformRole is SCHOOL_ADMIN — the one school this account
+  // administers. Assigned/changed exclusively by a Platform Admin.
+  schoolAdminOfId   String?
+  schoolAdminOf     School?  @relation("SchoolAdminOf", fields: [schoolAdminOfId], references: [id])
+
+  serviceHourGoal   Int      @default(50)
+
+  // settings
+  theme             String   @default("system") // "light" | "dark" | "system"
+  calendarView      String   @default("month")  // "month" | "week" | "day" | "agenda"
+  weekStartsOn      String   @default("sunday")
+  timeFormat        String   @default("12h")     // "12h" | "24h"
+  // Comma-separated minutes-before values, e.g. "60,1440" = 1 hour and 1 day
+  // before. See REMINDER_OFFSETS in src/lib/constants.ts for the allowed set.
+  reminderOffsets   String   @default("1440")
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  sessions            Session[]
+  memberships         ClubMembership[]
+  createdClubs        Club[]              @relation("ClubCreatedBy")
+  eventRegistrations  EventRegistration[]
+  eventInvites        EventInvite[]
+  serviceHourRecords  ServiceHourRecord[]  @relation("ServiceHourOwner")
+  approvedServiceHours ServiceHourRecord[] @relation("ServiceHourApprover")
+  notifications       Notification[]
+  achievements        UserAchievement[]
+  createdAnnouncements Announcement[]
+  auditLogs           AuditLog[]           @relation("AuditActor")
+  createdEvents       Event[]              @relation("EventCreatedBy")
+  personalEvents      PersonalEvent[]
+  personalEventCategories PersonalEventCategory[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  userAgent String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model School {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  city      String?
+  region    String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  // Ordered CSV of this school's grade levels, low → high (e.g. a school that
+  // skips Grade 8 would use "Grade 9,Grade 10,Grade 11,Grade 12"). A subset +
+  // reorder of the standard GRADES constant — see src/lib/grades.ts.
+  gradeLevels String @default("Grade 8,Grade 9,Grade 10,Grade 11,Grade 12")
+
+  users        User[]
+  clubs        Club[]
+  schoolAdmins User[] @relation("SchoolAdminOf")
+}
+
+// ---------- Clubs ----------
+
+model Club {
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  description      String
+  missionStatement String?
+  category         String   // comma-joined multi-value CSV, e.g. "Academic,STEM" — from "Academic" | "Athletics" | "STEM" | "Arts" | "Volunteer" | ...
+  color            String   // hex color, unique-ish per school (enforced in app logic)
+  logoUrl          String?
+  bannerUrl        String?
+
+  schoolId         String
+  school           School   @relation(fields: [schoolId], references: [id])
+
+  meetingSchedule  String?
+  meetingLocation  String?
+  contactEmail     String?
+  instagramUrl     String?
+  websiteUrl       String?
+
+  requiresApproval Boolean  @default(false)
+
+  createdById      String
+  createdBy        User     @relation("ClubCreatedBy", fields: [createdById], references: [id])
+
+  // moderation / lifecycle
+  status           String   @default("ACTIVE") // "ACTIVE" | "ARCHIVED" | "MERGED"
+  mergedIntoId     String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  memberships   ClubMembership[]
+  events        Event[]
+  announcements Announcement[]
+  serviceHours  ServiceHourRecord[]
+}
+
+model ClubMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  // role: "MEMBER" | "OFFICER" | "DIRECTOR"
+  role      String   @default("MEMBER")
+  // status: "ACTIVE" | "PENDING"
+  status    String   @default("ACTIVE")
+
+  joinedAt  DateTime @default(now())
+
+  @@unique([userId, clubId])
+}
+
+// ---------- Events ----------
+
+model Event {
+  id                    String   @id @default(cuid())
+  clubId                String
+  club                  Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  title                 String
+  description           String
+  category              String   // "Meeting" | "Volunteer" | "Fundraiser" | "Competition" | ...
+  bannerUrl             String?
+
+  startAt               DateTime
+  endAt                 DateTime
+  timezone              String   @default("America/Vancouver")
+
+  building              String?
+  room                  String?
+  address               String?
+  mapLink               String?
+
+  // visibility: "PUBLIC" | "PRIVATE"
+  visibility            String   @default("PUBLIC")
+  // Comma-separated grade values (e.g. "Grade 9,Grade 10") restricting who can
+  // register. Null/empty means open to every grade. Doesn't affect who can see
+  // the event, only who can register for it.
+  allowedGrades         String?
+
+  maxParticipants       Int?
+  registrationDeadline  DateTime?
+  waitlistEnabled       Boolean  @default(false)
+
+  awardsServiceHours    Boolean  @default(false)
+  defaultServiceHours   Float    @default(0)
+  serviceTaskDescription String?
+
+  // Independent of awardsServiceHours — a meeting can track who showed up
+  // without handing out hours, or award hours without a formal roster.
+  attendanceEnabled     Boolean  @default(false)
+
+  // status: "SCHEDULED" | "COMPLETED" | "FINALIZED" | "CANCELLED"
+  status                String   @default("SCHEDULED")
+  eventImpact           String?
+
+  // recurrence: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY"
+  recurrence            String   @default("NONE")
+  recurrenceParentId    String?
+  recurrenceUntil       DateTime?
+
+  createdById           String
+  createdBy             User     @relation("EventCreatedBy", fields: [createdById], references: [id])
+
+  createdAt             DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  registrations   EventRegistration[]
+  invites         EventInvite[]
+  attachments     EventAttachment[]
+  checklistItems  EventChecklistItem[]
+  serviceHours    ServiceHourRecord[]
+  roles           EventRole[]
+}
+
+// Optional signup roles for an event (e.g. "Setup Crew", "Referee") — when an
+// event has any roles defined, joining requires picking one (see
+// EventRegistration.roleId), so a director can see at a glance which roles
+// are filled instead of just a single headcount.
+model EventRole {
+  id       String @id @default(cuid())
+  eventId  String
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name     String
+  capacity Int
+  order    Int    @default(0)
+
+  registrations EventRegistration[]
+}
+
+model EventInvite {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+model EventRegistration {
+  id           String   @id @default(cuid())
+  eventId      String
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // status: "REGISTERED" | "WAITLISTED" | "CANCELLED" | "ATTENDED" | "NO_SHOW"
+  status       String   @default("REGISTERED")
+  registeredAt DateTime @default(now())
+
+  // Which signup role this person picked, if the event has any defined.
+  // Null when the event has no roles at all.
+  roleId String?
+  role   EventRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  // Comma-separated minutes-before values overriding the user's account-wide
+  // reminderOffsets default for just this event. Null = use the default.
+  reminderOffsets String?
+
+  // Director's free-text note from the Attendance page (e.g. "left early").
+  attendanceNote String?
+
+  @@unique([eventId, userId])
+}
+
+model EventAttachment {
+  id         String   @id @default(cuid())
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  filename   String
+  url        String
+  mimeType   String
+  size       Int
+  uploadedAt DateTime @default(now())
+}
+
+model EventChecklistItem {
+  id          String   @id @default(cuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  task        String
+  description String?
+  dueDate     DateTime?
+  completed   Boolean  @default(false)
+  order       Int      @default(0)
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+// ---------- Service Hours & Achievements ----------
+
+model ServiceHourRecord {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation("ServiceHourOwner", fields: [userId], references: [id], onDelete: Cascade)
+  // clubId is null for self-reported hours from outside ClubSync (see selfReported below).
+  clubId           String?
+  club             Club?    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  eventId          String?
+  event            Event?   @relation(fields: [eventId], references: [id])
+
+  hours            Float
+  taskDescription  String?
+  eventImpact      String?
+  reflection       String?
+
+  // Only set for self-reported hours (organization/supervisor instead of a ClubSync club).
+  organizationName String?
+  supervisorName   String?
+  performedAt      DateTime?
+  // True for hours a student logs themselves for volunteering outside any ClubSync
+  // club/event. These start at status "PENDING" (never auto-VERIFIED) to preserve
+  // the "verified means a director confirmed it" trust principle — students never
+  // mark their own hours VERIFIED.
+  selfReported     Boolean  @default(false)
+
+  // status: "VERIFIED" | "PENDING" | "REJECTED"
+  status           String   @default("VERIFIED")
+
+  approvedById     String?
+  approvedBy       User?    @relation("ServiceHourApprover", fields: [approvedById], references: [id])
+  approvedAt       DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Achievement {
+  id          String @id @default(cuid())
+  key         String @unique
+  title       String
+  description String
+  icon        String
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  unlockedAt    DateTime    @default(now())
+
+  @@unique([userId, achievementId])
+}
+
+// ---------- Personal Calendar ----------
+
+// A student's own named color legend for personal events (e.g. "Volunteering"
+// = purple, "Personal Life" = gray) — lets them build their own categorization
+// system. Colors are unique per-user so two categories never look the same.
+model PersonalEventCategory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String
+  createdAt DateTime @default(now())
+
+  events PersonalEvent[]
+
+  @@unique([userId, color])
+}
+
+// A student's own calendar entries — not tied to any club, visible only to
+// them, shown alongside (but separately styled from) club events.
+model PersonalEvent {
+  id          String                 @id @default(cuid())
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  location    String?
+  categoryId  String?
+  category    PersonalEventCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // recurrence: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY" — mirrors Event's
+  // recurrence fields. Each occurrence is its own row; recurrenceParentId
+  // links repeats back to the first one so they can be deleted as a group.
+  recurrence         String    @default("NONE")
+  recurrenceParentId String?
+  recurrenceUntil    DateTime?
+
+  createdAt   DateTime               @default(now())
+}
+
+// ---------- Notifications & Audit ----------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "EVENT_REMINDER" | "ANNOUNCEMENT" | "REGISTRATION" | "SERVICE_HOURS" | "ACHIEVEMENT" | "PLATFORM"
+  title     String
+  body      String
+  linkUrl   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  actor         User     @relation("AuditActor", fields: [actorUserId], references: [id])
+  action        String
+  targetType    String
+  targetId      String
+  previousValue String?
+  newValue      String?
+  reason        String?
+  createdAt     DateTime @default(now())
+}
