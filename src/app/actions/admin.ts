@@ -294,19 +294,23 @@ export async function adminCancelEventAction(eventId: string) {
 // ---- Service Hours ----
 
 export async function adminUpdateServiceHoursAction(recordId: string, hours: number, reason: string) {
-  const admin = await requireAdmin();
   const before = await db.serviceHourRecord.findUniqueOrThrow({ where: { id: recordId } });
+  const { me } = await requireSchoolAccessForUser(before.userId);
   await db.serviceHourRecord.update({ where: { id: recordId }, data: { hours } });
-  await logAudit(admin.id, "EDIT_SERVICE_HOURS", "ServiceHourRecord", recordId, { hours: before.hours }, { hours }, reason);
+  await logAudit(me.id, "EDIT_SERVICE_HOURS", "ServiceHourRecord", recordId, { hours: before.hours }, { hours }, reason);
   revalidatePath("/admin/service-hours");
+  revalidatePath(`/admin/users/${before.userId}`);
+  if (me.schoolAdminOfId) revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${before.userId}`);
 }
 
 export async function adminDeleteServiceHoursAction(recordId: string, reason: string) {
-  const admin = await requireAdmin();
   const before = await db.serviceHourRecord.findUniqueOrThrow({ where: { id: recordId } });
+  const { me } = await requireSchoolAccessForUser(before.userId);
   await db.serviceHourRecord.delete({ where: { id: recordId } });
-  await logAudit(admin.id, "DELETE_SERVICE_HOURS", "ServiceHourRecord", recordId, before, undefined, reason);
+  await logAudit(me.id, "DELETE_SERVICE_HOURS", "ServiceHourRecord", recordId, before, undefined, reason);
   revalidatePath("/admin/service-hours");
+  revalidatePath(`/admin/users/${before.userId}`);
+  if (me.schoolAdminOfId) revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${before.userId}`);
 }
 
 export async function adminVerifyServiceHoursAction(recordId: string) {
@@ -348,4 +352,135 @@ export async function adminRejectServiceHoursAction(recordId: string, reason: st
   });
   revalidatePath("/admin/service-hours");
   revalidatePath("/service-hours");
+}
+
+// ---- Manual service-hour correction ----
+
+export type AddHoursState = { error: string | null; success?: boolean };
+
+export async function adminAddServiceHoursAction(userId: string, _prev: AddHoursState, formData: FormData): Promise<AddHoursState> {
+  const { me } = await requireSchoolAccessForUser(userId);
+  const hours = Number(formData.get("hours"));
+  const reason = String(formData.get("reason") ?? "").trim();
+  const taskDescription = String(formData.get("taskDescription") ?? "").trim();
+  if (!Number.isFinite(hours) || hours <= 0) return { error: "Enter a valid number of hours." };
+  if (!reason) return { error: "A reason is required so there's a record of why these hours were added manually." };
+
+  const record = await db.serviceHourRecord.create({
+    data: {
+      userId,
+      hours,
+      taskDescription: taskDescription || null,
+      status: "VERIFIED",
+      approvedById: me.id,
+      approvedAt: new Date(),
+    },
+  });
+  await logAudit(me.id, "ADD_SERVICE_HOURS", "ServiceHourRecord", record.id, undefined, { hours }, reason);
+  await checkAndUnlockAchievements(userId);
+  revalidatePath("/admin/service-hours");
+  revalidatePath(`/admin/users/${userId}`);
+  revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${userId}`);
+  revalidatePath("/service-hours");
+  return { error: null, success: true };
+}
+
+// ---- Account merging ----
+// For a student who ends up with two accounts (e.g. signed up once, then again
+// later with a different email via "Continue with Google") — moves club
+// memberships, service-hour records, and event registrations from `sourceUserId`
+// into `targetUserId`, then marks the source MERGED (blocked from logging in,
+// never deleted, so the transfer stays auditable and reversible-by-hand if needed).
+// Deliberately does NOT deduplicate service-hour records that exist on both
+// accounts for the same event — merging can genuinely double up an attended
+// event's hours, and it's safer to leave both records for a human to review and
+// remove the extra one via adminDeleteServiceHoursAction than to guess which to drop.
+
+export type MergePreview = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  clubCount: number;
+  verifiedHours: number;
+  eventCount: number;
+};
+
+export async function previewMergeCandidateAction(targetUserId: string, email: string): Promise<{ error: string | null; candidate?: MergePreview }> {
+  const { me, targetUser: target } = await requireSchoolAccessForUser(targetUserId);
+  const identifier = email.trim().toLowerCase();
+  if (!identifier) return { error: "Enter an email." };
+
+  const candidate = await db.user.findUnique({ where: { email: identifier } });
+  if (!candidate) return { error: "No account found with that email." };
+  if (candidate.id === targetUserId) return { error: "That's the same account." };
+  if (candidate.accountStatus === "MERGED") return { error: "That account has already been merged into another one." };
+  if (candidate.schoolId !== target.schoolId) return { error: "Both accounts must be at the same school." };
+  // Re-verify access to the *candidate* side too — a School Admin can only ever
+  // reach STUDENT accounts at their own school, same as every other admin action.
+  if (me.platformRole === "SCHOOL_ADMIN" && candidate.platformRole !== "STUDENT") {
+    return { error: "That account can't be merged by a School Admin." };
+  }
+
+  const [clubCount, hoursAgg, eventCount] = await Promise.all([
+    db.clubMembership.count({ where: { userId: candidate.id, status: "ACTIVE" } }),
+    db.serviceHourRecord.aggregate({ where: { userId: candidate.id, status: "VERIFIED" }, _sum: { hours: true } }),
+    db.eventRegistration.count({ where: { userId: candidate.id, status: "ATTENDED" } }),
+  ]);
+
+  return {
+    error: null,
+    candidate: {
+      id: candidate.id,
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      email: candidate.email,
+      clubCount,
+      verifiedHours: hoursAgg._sum.hours ?? 0,
+      eventCount,
+    },
+  };
+}
+
+export async function mergeUserAccountsAction(targetUserId: string, sourceUserId: string): Promise<{ error: string | null }> {
+  if (targetUserId === sourceUserId) return { error: "Can't merge an account into itself." };
+  const { me, targetUser: target } = await requireSchoolAccessForUser(targetUserId);
+  const { targetUser: source } = await requireSchoolAccessForUser(sourceUserId);
+  if (source.schoolId !== target.schoolId) return { error: "Both accounts must be at the same school." };
+  if (source.accountStatus === "MERGED") return { error: "That account has already been merged." };
+
+  await db.$transaction(async (tx) => {
+    const sourceMemberships = await tx.clubMembership.findMany({ where: { userId: sourceUserId } });
+    for (const m of sourceMemberships) {
+      await tx.clubMembership.upsert({
+        where: { userId_clubId: { userId: targetUserId, clubId: m.clubId } },
+        update: {},
+        create: { userId: targetUserId, clubId: m.clubId, role: m.role, status: m.status },
+      });
+    }
+
+    // Every service-hour record moves over as-is, duplicates included on purpose (see note above).
+    await tx.serviceHourRecord.updateMany({ where: { userId: sourceUserId }, data: { userId: targetUserId } });
+
+    // Event registrations can't duplicate (eventId, userId is unique) — if the
+    // target already has one for a given event, leave the source's copy behind
+    // on the now-merged account rather than erroring the whole merge.
+    const sourceRegs = await tx.eventRegistration.findMany({ where: { userId: sourceUserId } });
+    for (const r of sourceRegs) {
+      const existing = await tx.eventRegistration.findUnique({ where: { eventId_userId: { eventId: r.eventId, userId: targetUserId } } });
+      if (!existing) {
+        await tx.eventRegistration.update({ where: { id: r.id }, data: { userId: targetUserId } });
+      }
+    }
+
+    await tx.session.deleteMany({ where: { userId: sourceUserId } });
+    await tx.user.update({ where: { id: sourceUserId }, data: { accountStatus: "MERGED", mergedIntoId: targetUserId } });
+  });
+
+  await checkAndUnlockAchievements(targetUserId);
+  await logAudit(me.id, "MERGE_USERS", "User", sourceUserId, undefined, { mergedIntoId: targetUserId });
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${targetUserId}`);
+  if (me.schoolAdminOfId) revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${targetUserId}`);
+  return { error: null };
 }

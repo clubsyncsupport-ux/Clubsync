@@ -4,6 +4,7 @@ import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { formatEventDate, timeAgo } from "@/lib/format";
 import { greeting } from "@/lib/format";
 import { Plus, Megaphone, Users, Shield, CalendarDays, BarChart3, type LucideIcon } from "lucide-react";
@@ -11,20 +12,23 @@ import { Plus, Megaphone, Users, Shield, CalendarDays, BarChart3, type LucideIco
 export async function generateMetadata({ params }: { params: Promise<{ clubId: string }> }): Promise<Metadata> {
   const { clubId } = await params;
   const club = await db.club.findUnique({ where: { id: clubId }, select: { name: true } });
-  return { title: club ? `${club.name} Dashboard` : "Director Dashboard" };
+  return { title: club ? `${club.name} Dashboard` : "Teacher Dashboard" };
 }
 
 export default async function DirectorDashboardPage({ params }: { params: Promise<{ clubId: string }> }) {
   const { clubId } = await params;
   const { club, user } = await getDirectorContext(clubId);
 
-  const [memberCount, upcomingEvents, pendingApprovals, pendingServiceHours, recentAnnouncements, nextEvent] = await Promise.all([
+  const [memberCount, upcomingEvents, pendingApprovals, pendingServiceHours, recentAnnouncements, nextEvent, pendingSupervisor] = await Promise.all([
     db.clubMembership.count({ where: { clubId, status: "ACTIVE" } }),
     db.event.count({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } } }),
     db.clubMembership.count({ where: { clubId, status: "PENDING" } }),
     db.event.count({ where: { clubId, status: "COMPLETED" } }),
     db.announcement.findMany({ where: { clubId }, orderBy: { createdAt: "desc" }, take: 3 }),
     db.event.findFirst({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } }, orderBy: { startAt: "asc" } }),
+    club.approvalStatus === "PENDING_SUPERVISOR" && club.pendingSupervisorId
+      ? db.user.findUnique({ where: { id: club.pendingSupervisorId }, select: { firstName: true, lastName: true } })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -35,6 +39,18 @@ export default async function DirectorDashboardPage({ params }: { params: Promis
         </h1>
         <p className="mt-1 text-[15px] text-text-secondary">{club.name}</p>
       </div>
+
+      {club.approvalStatus === "PENDING_SUPERVISOR" && (
+        <Card className="border-warning/30 bg-warning-soft">
+          <CardContent className="flex items-center gap-2 p-4">
+            <Badge tone="warning">Awaiting approval</Badge>
+            <p className="text-sm text-warning">
+              Not visible to anyone yet — {pendingSupervisor ? `${pendingSupervisor.firstName} ${pendingSupervisor.lastName}` : "your supervisor"} still needs
+              to approve this club.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {nextEvent && (
         <Card className="bg-gradient-to-br from-accent to-accent-hover border-none text-on-accent">

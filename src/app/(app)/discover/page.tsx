@@ -23,6 +23,7 @@ export default async function DiscoverPage({
     where: {
       schoolId: viewer.schoolId!,
       status: "ACTIVE",
+      approvalStatus: "APPROVED",
       ...(q ? { OR: [{ name: { contains: q } }, { description: { contains: q } }] } : {}),
     },
     include: { _count: { select: { memberships: { where: { status: "ACTIVE" } } } } },

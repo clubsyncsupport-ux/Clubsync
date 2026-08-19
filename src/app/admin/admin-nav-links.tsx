@@ -19,7 +19,7 @@ function activeHref(pathname: string | null, items: { href: string }[]): string 
   return prefixMatches.reduce((longest, i) => (i.href.length > longest.href.length ? i : longest)).href;
 }
 
-export function AdminNavLinks({ items }: { items: { href: string; label: string; icon: NavIconName }[] }) {
+export function AdminNavLinks({ items }: { items: { href: string; label: string; icon: NavIconName; badge?: boolean }[] }) {
   const pathname = usePathname();
   const current = activeHref(pathname, items);
   return (
@@ -36,7 +36,10 @@ export function AdminNavLinks({ items }: { items: { href: string; label: string;
               active ? "bg-accent-soft text-accent-soft-text" : "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
             )}
           >
-            <Icon className="h-4 w-4" strokeWidth={2} />
+            <span className="relative inline-flex">
+              <Icon className="h-4 w-4" strokeWidth={2} />
+              {item.badge && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-danger" />}
+            </span>
             {item.label}
           </Link>
         );
@@ -48,7 +51,7 @@ export function AdminNavLinks({ items }: { items: { href: string; label: string;
 // Horizontally-scrollable pill strip shown on mobile, where the sidebar is
 // hidden entirely — without this there was no way to reach any admin section
 // (including back to Dashboard) except the "Exit" link out of the panel.
-export function AdminMobileNavLinks({ items }: { items: { href: string; label: string; icon: NavIconName }[] }) {
+export function AdminMobileNavLinks({ items }: { items: { href: string; label: string; icon: NavIconName; badge?: boolean }[] }) {
   const pathname = usePathname();
   const current = activeHref(pathname, items);
   return (
@@ -65,7 +68,10 @@ export function AdminMobileNavLinks({ items }: { items: { href: string; label: s
               active ? "bg-accent-soft text-accent-soft-text" : "bg-surface-2 text-text-secondary"
             )}
           >
-            <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+            <span className="relative inline-flex">
+              <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+              {item.badge && <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-danger" />}
+            </span>
             {item.label}
           </Link>
         );

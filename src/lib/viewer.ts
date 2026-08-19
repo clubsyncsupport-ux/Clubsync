@@ -15,6 +15,7 @@ export async function getViewer() {
     },
   });
   if (user.accountStatus === "SUSPENDED") redirect("/suspended");
+  if (user.accountStatus === "MERGED") redirect("/merged");
   if (!user.schoolId) redirect("/onboarding");
   return user;
 }
@@ -34,19 +35,17 @@ export function directorClubs(viewer: Viewer) {
 }
 
 // Where a user should land after login / visiting "/" — STAFF accounts
-// (club directors with no student profile) go straight to their club's
-// dashboard instead of the student home, since they have no student view.
+// (teachers, with no student profile) always land on their account-level
+// Teacher Dashboard first, whether they have zero, one, or several clubs —
+// they pick a specific club from there, same as the profile switcher.
 export async function resolveLandingPath(userId: string): Promise<string> {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    include: { memberships: { where: { role: { in: ["DIRECTOR", "OFFICER"] }, status: "ACTIVE" }, take: 1 } },
-  });
+  const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) return "/welcome";
   // A School Admin account with no personal student/staff profile has no
   // onboarding to complete and no student app to land in — send them
   // straight to the school they administer instead of the onboarding trap.
   if (user.platformRole === "SCHOOL_ADMIN" && user.schoolAdminOfId && !user.schoolId) return `/school-admin/${user.schoolAdminOfId}`;
   if (!user.schoolId) return "/onboarding";
-  if (user.accountKind === "STAFF" && user.memberships[0]) return `/director/${user.memberships[0].clubId}`;
+  if (user.accountKind === "STAFF") return "/teacher";
   return "/home";
 }

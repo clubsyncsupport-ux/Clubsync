@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { db } from "@/lib/db";
-import type { AuthProvider, AuthResult, SignInInput, SignUpInput } from "./types";
+import type { AuthProvider, AuthResult, GoogleProfile, SignInInput, SignUpInput } from "./types";
 
 const SESSION_DAYS = 30;
 
@@ -76,6 +76,29 @@ export const localAuthProvider: AuthProvider = {
 
     const { token, expiresAt } = await createSession(user.id);
     return { ok: true, user: toSessionUser(user), sessionToken: token, expiresAt };
+  },
+
+  async signInWithGoogle(profile: GoogleProfile) {
+    const email = profile.email.trim().toLowerCase();
+
+    let user = await db.user.findUnique({ where: { googleId: profile.googleId } });
+    if (!user) {
+      const existingByEmail = await db.user.findUnique({ where: { email } });
+      user = existingByEmail
+        ? await db.user.update({ where: { id: existingByEmail.id }, data: { googleId: profile.googleId } })
+        : await db.user.create({
+            data: {
+              email,
+              googleId: profile.googleId,
+              firstName: profile.firstName,
+              lastName: profile.lastName,
+              avatarUrl: profile.avatarUrl,
+            },
+          });
+    }
+
+    const { token, expiresAt } = await createSession(user.id);
+    return { ok: true, user: toSessionUser(user), sessionToken: token, expiresAt } as const;
   },
 
   async signOut(sessionToken: string): Promise<void> {

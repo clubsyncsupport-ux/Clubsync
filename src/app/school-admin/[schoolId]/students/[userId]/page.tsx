@@ -9,6 +9,8 @@ import { EditGradeForm } from "@/components/edit-grade-form";
 import { schoolGradeLevels } from "@/lib/grades";
 import { BackButton } from "@/components/ui/back-button";
 import { StudentActions } from "./student-actions";
+import { MergeUserSection } from "@/components/admin/merge-user-section";
+import { ServiceHoursManager } from "@/components/admin/service-hours-manager";
 
 export async function generateMetadata({ params }: { params: Promise<{ userId: string }> }): Promise<Metadata> {
   const { userId } = await params;
@@ -96,6 +98,14 @@ export default async function SchoolAdminStudentDetailPage({ params }: { params:
           </CardContent>
         </Card>
       )}
+
+      <div className="mt-4">
+        <ServiceHoursManager userId={user.id} />
+      </div>
+
+      <div className="mt-4">
+        <MergeUserSection userId={user.id} name={`${user.firstName} ${user.lastName}`} />
+      </div>
 
       <div className="mt-6">
         <StudentActions schoolId={schoolId} userId={user.id} accountStatus={user.accountStatus} />

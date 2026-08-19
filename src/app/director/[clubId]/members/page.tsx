@@ -78,7 +78,7 @@ export default async function DirectorMembersPage({
       )}
 
       <div id="admins" className="mt-6 scroll-mt-6">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Director &amp; Admins</h2>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Teacher &amp; Admins</h2>
         {admins.length === 0 ? (
           <p className="text-sm text-text-muted">No admins yet — promote a member below to help run the club.</p>
         ) : (

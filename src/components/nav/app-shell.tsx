@@ -35,7 +35,7 @@ export function AppShell({
       {/* Desktop sidebar — sticky so it stays put (and the profile menu stays reachable)
           on pages tall enough to scroll, instead of scrolling away with the content. */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-surface-1 p-4 md:sticky md:top-0 md:flex md:h-dvh print:hidden">
-        <Link href="/home" className="flex items-center gap-2 px-2 py-3">
+        <Link href={isStaff ? "/teacher" : "/home"} className="flex items-center gap-2 px-2 py-3">
           <span className="text-xl font-bold tracking-tight text-text-primary">ClubSync</span>
         </Link>
         {eyebrow && <p className="mt-2 truncate px-2 text-xs font-medium uppercase tracking-wide text-text-muted">{eyebrow}</p>}
@@ -54,7 +54,7 @@ export function AppShell({
       <div className="flex min-h-dvh flex-1 flex-col">
         {/* Mobile top bar */}
         <header className="flex items-center justify-between border-b border-border bg-surface-1 px-4 py-3 md:hidden print:hidden">
-          <Link href="/home" className="flex items-center gap-2">
+          <Link href={isStaff ? "/teacher" : "/home"} className="flex items-center gap-2">
             <span className="text-lg font-bold tracking-tight text-text-primary">ClubSync</span>
           </Link>
           <div className="flex items-center gap-1">

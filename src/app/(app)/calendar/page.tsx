@@ -26,6 +26,7 @@ import { EventCard } from "@/components/event-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { ColorDot } from "@/components/ui/badge";
+import { ClubFilterLegend } from "@/components/club-filter-legend";
 import { AddPersonalEvent } from "./add-personal-event";
 import { PersonalEventRow } from "./personal-event-row";
 import { ColorIndex } from "./color-index";
@@ -131,13 +132,8 @@ export default async function CalendarPage({
       </div>
 
       {(clubs.length > 0 || categories.length > 0) && (
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-          {clubs.map((c) => (
-            <div key={c.id} className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <ColorDot color={c.color} />
-              {c.name}
-            </div>
-          ))}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <ClubFilterLegend clubs={clubs} storageKey="clubsync_hidden_clubs_student_calendar" />
           {categories.map((c) => (
             <div key={c.id} className="flex items-center gap-1.5 text-xs text-text-secondary">
               <ColorDot color={c.color} />
@@ -244,6 +240,7 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
                 {dayItems.slice(0, 3).map((it) => (
                   <div
                     key={it.id}
+                    data-club-id={it.kind === "club" ? it.event.club.id : undefined}
                     className={cn(
                       "truncate rounded px-1 py-0.5 text-[10px] font-medium text-white sm:text-[11px]",
                       it.kind === "personal" && "border border-dashed border-white/60"
@@ -281,6 +278,7 @@ function WeekColumns({ refDate, items }: { refDate: Date; items: CalendarItem[] 
                   <Link
                     key={it.id}
                     href={`/events/${it.id}`}
+                    data-club-id={it.event.club.id}
                     className="block truncate rounded-lg px-2 py-1 text-[11px] font-medium text-white"
                     style={{ backgroundColor: it.color }}
                     title={it.title}

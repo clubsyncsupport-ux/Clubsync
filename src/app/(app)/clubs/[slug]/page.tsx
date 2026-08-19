@@ -39,7 +39,7 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
     },
   });
 
-  if (!club || club.status !== "ACTIVE") notFound();
+  if (!club || club.status !== "ACTIVE" || club.approvalStatus !== "APPROVED") notFound();
 
   const myMembership =
     viewer.memberships.find((m) => m.clubId === club.id) ??
@@ -129,7 +129,7 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
           ) : (
             <div className="space-y-2">
               {club.events.map((e) => (
-                <EventCard key={e.id} event={{ ...e, club: { name: club.name, color: club.color, slug: club.slug } }} />
+                <EventCard key={e.id} event={{ ...e, club: { id: club.id, name: club.name, color: club.color, slug: club.slug } }} />
               ))}
             </div>
           )}

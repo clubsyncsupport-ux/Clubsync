@@ -46,10 +46,15 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
   // director clicking another club's event shouldn't 404. Regular students
   // are unaffected: they still need membership (or an invite for PRIVATE
   // events) exactly as before.
+  // A club still awaiting its supervisor's approval is invisible to everyone
+  // except its own members (i.e. the creator) — the school-staff widening
+  // below is meant for coordinating across already-public clubs, not for
+  // previewing a club nobody has approved yet.
   const isSchoolStaff =
-    viewer.platformRole === "PLATFORM_ADMIN" ||
-    (viewer.platformRole === "SCHOOL_ADMIN" && viewer.schoolAdminOfId === event.club.schoolId) ||
-    directorClubs(viewer).some((c) => c.schoolId === event.club.schoolId);
+    event.club.approvalStatus === "APPROVED" &&
+    (viewer.platformRole === "PLATFORM_ADMIN" ||
+      (viewer.platformRole === "SCHOOL_ADMIN" && viewer.schoolAdminOfId === event.club.schoolId) ||
+      directorClubs(viewer).some((c) => c.schoolId === event.club.schoolId));
   const canView = isSchoolStaff || (event.visibility === "PUBLIC" ? isMember : event.invites.length > 0);
   if (!canView) notFound();
 

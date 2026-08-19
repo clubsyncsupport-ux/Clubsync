@@ -10,7 +10,7 @@ export type EventCardData = {
   building: string | null;
   room: string | null;
   awardsServiceHours: boolean;
-  club: { name: string; color: string; slug: string };
+  club: { id: string; name: string; color: string; slug: string };
 };
 
 // Red is reserved app-wide to mean "full" (never a pickable club/category
@@ -22,6 +22,7 @@ export function EventCard({ event, full = false }: { event: EventCardData; full?
   return (
     <Link
       href={`/events/${event.id}`}
+      data-club-id={event.club.id}
       className="flex items-center gap-3 rounded-2xl border border-border bg-surface-1 p-4 transition-all hover:border-border-strong hover:shadow-[var(--shadow-sm)] active:scale-[0.99]"
     >
       <div className="h-11 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />

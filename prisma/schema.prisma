@@ -27,6 +27,10 @@ model User {
   id                String   @id @default(cuid())
   email             String   @unique
   passwordHash      String? // null if account was created via a future external auth provider
+  // Google's stable per-account "sub" claim, set the first time this account
+  // signs in with Google (whether that's a brand-new account or linking an
+  // existing password account that shares the same email). Null otherwise.
+  googleId          String?  @unique
   firstName         String
   lastName          String
   avatarUrl         String?
@@ -37,8 +41,13 @@ model User {
   // by schoolAdminOfId (distinct from schoolId, which is this person's own
   // student/staff school — a School Admin need not have a profile there at all).
   platformRole      String   @default("STUDENT")
-  // accountStatus: "ACTIVE" | "SUSPENDED"
+  // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED"
   accountStatus     String   @default("ACTIVE")
+  // Set when this account has been merged into another (see mergeUserAccountsAction) —
+  // its club memberships, service-hour records, and event registrations have been
+  // moved to mergedIntoId, and this account can no longer log in. Plain id reference,
+  // no relation, mirroring Club.mergedIntoId.
+  mergedIntoId      String?
   // accountKind: "STUDENT" | "STAFF" — STAFF is for a sponsor teacher / club-only
   // account that signed up directly as a Club Director. It has no grade and no
   // "Student" profile — its entire experience is the director dashboard(s) it owns.
@@ -72,6 +81,7 @@ model User {
   sessions            Session[]
   memberships         ClubMembership[]
   createdClubs        Club[]              @relation("ClubCreatedBy")
+  pendingSupervisorFor Club[]             @relation("ClubPendingSupervisor")
   eventRegistrations  EventRegistration[]
   eventInvites        EventInvite[]
   serviceHourRecords  ServiceHourRecord[]  @relation("ServiceHourOwner")
@@ -151,6 +161,17 @@ model Club {
   // moderation / lifecycle
   status           String   @default("ACTIVE") // "ACTIVE" | "ARCHIVED" | "MERGED"
   mergedIntoId     String?
+
+  // approvalStatus: "APPROVED" | "PENDING_SUPERVISOR" — a club a STUDENT
+  // self-creates starts PENDING_SUPERVISOR and is invisible to everyone
+  // except its creator, the picked pendingSupervisorId teacher, and admins,
+  // until that teacher approves it (see supervisor-request actions). A club
+  // a TEACHER creates themselves, or one created via the admin panel,
+  // defaults straight to APPROVED — no review needed, matching every
+  // existing club's default.
+  approvalStatus     String  @default("APPROVED")
+  pendingSupervisorId String?
+  pendingSupervisor   User?  @relation("ClubPendingSupervisor", fields: [pendingSupervisorId], references: [id])
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

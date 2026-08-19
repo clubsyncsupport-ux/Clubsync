@@ -31,7 +31,7 @@ export function MemberRow({
           {user.grade ?? "—"} · {user.email}
         </p>
       </div>
-      {membership.role !== "MEMBER" && <Badge tone="accent">{membership.role === "DIRECTOR" ? "Director" : "Admin"}</Badge>}
+      {membership.role !== "MEMBER" && <Badge tone="accent">{membership.role === "DIRECTOR" ? "Teacher" : "Admin"}</Badge>}
 
       {pending ? (
         <div className="flex gap-2">

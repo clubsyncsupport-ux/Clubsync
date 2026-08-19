@@ -67,7 +67,7 @@ export function ClubAdminActions({
             <p className="text-sm font-semibold text-text-primary">Transfer Ownership</p>
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <Label htmlFor="newDirector">New Director</Label>
+                <Label htmlFor="newDirector">New Teacher</Label>
                 <Select id="newDirector" value={newDirector} onChange={(e) => setNewDirector(e.target.value)}>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>

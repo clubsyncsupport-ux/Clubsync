@@ -20,7 +20,7 @@ import { db } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
-import { ClubFilterLegend } from "./club-filter-legend";
+import { ClubFilterLegend } from "@/components/club-filter-legend";
 
 type ViewType = "month" | "agenda";
 
@@ -106,7 +106,12 @@ export default async function AllClubsCalendarPage({
         </div>
       </div>
 
-      <ClubFilterLegend clubs={Array.from(new Map(events.map((e) => [e.club.id, e.club])).values())} />
+      <div className="mt-5">
+        <ClubFilterLegend
+          clubs={Array.from(new Map(events.map((e) => [e.club.id, e.club])).values())}
+          storageKey="clubsync_hidden_clubs_calendar"
+        />
+      </div>
 
       <div className="mt-5">
         {view === "month" ? (

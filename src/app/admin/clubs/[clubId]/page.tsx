@@ -56,10 +56,10 @@ export default async function AdminClubDetailPage({ params }: { params: Promise<
         href={`/director/${club.id}`}
         className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover"
       >
-        🛡 Manage as Director →
+        🛡 Manage as Teacher →
       </Link>
       <p className="mt-1.5 text-xs text-text-muted">
-        Opens this club&rsquo;s full director dashboard — events, members, announcements, and settings — so you can step in and help.
+        Opens this club&rsquo;s full teacher dashboard — events, members, announcements, and settings — so you can step in and help.
       </p>
 
       <p className="mt-4 text-sm text-text-primary">{club.description}</p>

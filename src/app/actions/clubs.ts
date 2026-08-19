@@ -23,6 +23,19 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
 
   if (!name || !description) return { error: "Club name and description are required." };
 
+  // A teacher creating their own club needs no one's approval — they become
+  // its Director immediately, same as always. A student needs a real teacher
+  // at the same school to vouch for the club before it's visible to anyone.
+  let supervisor = null;
+  if (user.accountKind !== "STAFF") {
+    const supervisorId = String(formData.get("supervisorId") ?? "").trim();
+    if (!supervisorId) return { error: "Pick a teacher to supervise this club." };
+    supervisor = await db.user.findUnique({ where: { id: supervisorId } });
+    if (!supervisor || supervisor.accountKind !== "STAFF" || supervisor.schoolId !== user.schoolId) {
+      return { error: "Pick a valid teacher at your school." };
+    }
+  }
+
   const baseSlug = slugify(name);
   let slug = baseSlug;
   let n = 1;
@@ -40,9 +53,26 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
       schoolId: user.schoolId,
       meetingSchedule: meetingSchedule || null,
       createdById: user.id,
-      memberships: { create: { userId: user.id, role: "DIRECTOR", status: "ACTIVE" } },
+      approvalStatus: supervisor ? "PENDING_SUPERVISOR" : "APPROVED",
+      pendingSupervisorId: supervisor?.id,
+      // A student-creator gets OFFICER (shown as "Admin" everywhere) rather
+      // than DIRECTOR — the picked teacher becomes Director only once they
+      // approve (see approveSupervisorRequestAction).
+      memberships: { create: { userId: user.id, role: supervisor ? "OFFICER" : "DIRECTOR", status: "ACTIVE" } },
     },
   });
+
+  if (supervisor) {
+    await db.notification.create({
+      data: {
+        userId: supervisor.id,
+        type: "CLUB_SUPERVISOR_REQUEST",
+        title: "New club needs your approval",
+        body: `${user.firstName} ${user.lastName} wants you to supervise "${name}."`,
+        linkUrl: `/teacher/supervising-requests/${club.id}`,
+      },
+    });
+  }
 
   revalidatePath("/discover");
   redirect(`/director/${club.id}`);

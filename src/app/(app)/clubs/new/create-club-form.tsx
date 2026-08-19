@@ -6,14 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, FieldError } from "@/components/ui/input";
 import { ClubColorPicker } from "@/components/ui/club-color-picker";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
+import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@/lib/cn";
 import { CLUB_CATEGORIES, CLUB_COLOR_PALETTE } from "@/lib/constants";
 
-export function CreateClubForm({ takenColors = [] }: { takenColors?: string[] }) {
+type Teacher = { id: string; firstName: string; lastName: string; avatarUrl: string | null };
+
+export function CreateClubForm({ takenColors = [], teachers = [] }: { takenColors?: string[]; teachers?: Teacher[] }) {
   const [state, formAction, pending] = useActionState(createClubAction, { error: null });
   const [name, setName] = useState("");
   const [categories, setCategories] = useState<string[]>([CLUB_CATEGORIES[0]]);
   const [color, setColor] = useState<string>(CLUB_COLOR_PALETTE.find((c) => !takenColors.includes(c.value))?.value ?? CLUB_COLOR_PALETTE[0].value);
   const [similarClubs, setSimilarClubs] = useState<{ id: string; name: string }[]>([]);
+  const [supervisorId, setSupervisorId] = useState<string>("");
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -25,6 +30,8 @@ export function CreateClubForm({ takenColors = [] }: { takenColors?: string[] })
     }, 400);
     return () => clearTimeout(t);
   }, [name]);
+
+  const needsSupervisor = teachers.length > 0;
 
   return (
     <form action={formAction} className="mt-6 space-y-4">
@@ -61,10 +68,44 @@ export function CreateClubForm({ takenColors = [] }: { takenColors?: string[] })
         <Input id="meetingSchedule" name="meetingSchedule" placeholder="e.g. Tuesdays 3:30 PM, Room 204" />
       </div>
 
+      {needsSupervisor && (
+        <div>
+          <Label>Supervisor</Label>
+          <p className="mb-2 text-xs text-text-muted">
+            Pick the teacher who&rsquo;ll supervise this club — they&rsquo;ll need to approve it before it goes live.
+          </p>
+          <input type="hidden" name="supervisorId" value={supervisorId} />
+          {teachers.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-text-muted">
+              No teachers have signed up at your school yet. Ask a teacher to create a ClubSync account first.
+            </p>
+          ) : (
+            <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-xl border border-border p-2">
+              {teachers.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSupervisorId(t.id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                    supervisorId === t.id ? "border-accent bg-accent-soft" : "border-transparent hover:bg-surface-2"
+                  )}
+                >
+                  <Avatar firstName={t.firstName} lastName={t.lastName} src={t.avatarUrl} size="sm" />
+                  <span className="text-sm font-medium text-text-primary">
+                    {t.firstName} {t.lastName}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <FieldError>{state.error}</FieldError>
 
-      <Button type="submit" size="lg" className="w-full" disabled={pending}>
-        {pending ? "Creating club…" : "Create Club"}
+      <Button type="submit" size="lg" className="w-full" disabled={pending || (needsSupervisor && !supervisorId)}>
+        {pending ? "Creating club…" : needsSupervisor ? "Submit for Approval" : "Create Club"}
       </Button>
     </form>
   );

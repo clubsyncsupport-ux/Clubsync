@@ -65,7 +65,7 @@ export function ProfileSwitcher({
           ? schoolAdminOf?.name
             ? `${schoolAdminOf.name} Admin`
             : "School Admin"
-          : (directorClubs.find((c) => c.id === active.clubId)?.name ?? "Director");
+          : (directorClubs.find((c) => c.id === active.clubId)?.name ?? "Teacher");
 
   return (
     <div className="relative" ref={ref}>
@@ -109,11 +109,14 @@ export function ProfileSwitcher({
             {isAdmin && (
               <ProfileRow icon={Wrench} label="Platform Admin" selected={active.kind === "admin"} onClick={() => switchProfileAction({ kind: "admin" })} />
             )}
+            {directorClubs.length > 0 && (
+              <p className="mt-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">My Clubs</p>
+            )}
             {directorClubs.map((c) => (
               <ProfileRow
                 key={c.id}
                 icon={Shield}
-                label={`${c.name} Director`}
+                label={c.name}
                 selected={active.kind === "director" && active.clubId === c.id}
                 onClick={() => switchProfileAction({ kind: "director", clubId: c.id })}
               />

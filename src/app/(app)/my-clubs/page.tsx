@@ -49,7 +49,7 @@ export default async function MyClubsPage() {
                     <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                       <ColorDot color={m.club.color} />
                       {parseCategories(m.club.category).join(", ")}
-                      {m.role !== "MEMBER" && <Badge className="ml-1">{m.role === "DIRECTOR" ? "Director" : "Officer"}</Badge>}
+                      {m.role !== "MEMBER" && <Badge className="ml-1">{m.role === "DIRECTOR" ? "Teacher" : "Admin"}</Badge>}
                       {m.status === "PENDING" && <Badge tone="warning" className="ml-1">Pending</Badge>}
                     </div>
                   </div>

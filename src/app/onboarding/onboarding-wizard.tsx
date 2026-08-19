@@ -4,23 +4,19 @@ import { useEffect, useState, useTransition } from "react";
 import {
   completeDirectorOnboardingAction,
   completeStudentOnboardingAction,
-  checkClubNameAction,
   getClubsForSchoolAction,
-  getTakenColorsForSchoolAction,
   getGradeLevelsForSchoolAction,
 } from "@/app/actions/onboarding";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Textarea, FieldError } from "@/components/ui/input";
+import { Input, Label, FieldError } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
-import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
 import { parseCategories } from "@/lib/categories";
 import { ColorDot } from "@/components/ui/badge";
-import { ClubColorPicker } from "@/components/ui/club-color-picker";
 import { cn } from "@/lib/cn";
-import { CLUB_CATEGORIES, CLUB_COLOR_PALETTE, SERVICE_HOUR_GOALS } from "@/lib/constants";
+import { SERVICE_HOUR_GOALS } from "@/lib/constants";
 
 type AccountType = "student" | "director";
-type Step = "type" | "basics" | "clubs" | "club-create" | "goal";
+type Step = "type" | "basics" | "clubs" | "goal";
 
 const FALLBACK_GRADES = ["Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
 const DEFAULT_SCHOOL = "Hugh Boyd Secondary School";
@@ -35,14 +31,6 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
   const [clubs, setClubs] = useState<{ id: string; name: string; category: string; color: string; description: string }[]>([]);
   const [selectedClubIds, setSelectedClubIds] = useState<string[]>([]);
   const [gradeLevels, setGradeLevels] = useState<string[]>(FALLBACK_GRADES);
-
-  const [clubName, setClubName] = useState("");
-  const [clubDescription, setClubDescription] = useState("");
-  const [categories, setCategories] = useState<string[]>([CLUB_CATEGORIES[0]]);
-  const [color, setColor] = useState<string>(CLUB_COLOR_PALETTE[0].value);
-  const [meetingSchedule, setMeetingSchedule] = useState("");
-  const [similarClubs, setSimilarClubs] = useState<{ id: string; name: string }[]>([]);
-  const [takenColors, setTakenColors] = useState<string[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -59,23 +47,6 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
     if (step !== "clubs") return;
     getClubsForSchoolAction(schoolName).then(setClubs);
   }, [step, schoolName]);
-
-  useEffect(() => {
-    if (step !== "club-create") return;
-    getTakenColorsForSchoolAction(schoolName).then(setTakenColors);
-  }, [step, schoolName]);
-
-  useEffect(() => {
-    if (step !== "club-create") return;
-    const t = setTimeout(() => {
-      if (clubName.trim().length >= 3) {
-        checkClubNameAction(clubName, schoolName).then((r) => setSimilarClubs(r.similar));
-      } else {
-        setSimilarClubs([]);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [clubName, schoolName, step]);
 
   function toggleClub(id: string) {
     setSelectedClubIds((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -96,25 +67,16 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
 
   function submitDirector() {
     setError(null);
-    if (!clubName.trim() || !clubDescription.trim()) {
-      setError("Club name and description are required.");
-      return;
-    }
     const fd = new FormData();
     fd.set("schoolName", schoolName);
-    fd.set("clubName", clubName);
-    fd.set("clubDescription", clubDescription);
-    fd.set("category", categories.join(","));
-    fd.set("color", color);
-    fd.set("meetingSchedule", meetingSchedule);
     startTransition(async () => {
       const res = await completeDirectorOnboardingAction({ error: null }, fd);
       if (res.error) setError(res.error);
     });
   }
 
-  const stepIndex = { type: 0, basics: 1, clubs: 2, "club-create": 2, goal: 3 }[step];
-  const totalSteps = accountType === "student" ? 4 : 3;
+  const stepIndex = { type: 0, basics: 1, clubs: 2, goal: 3 }[step];
+  const totalSteps = accountType === "student" ? 4 : 2;
 
   return (
     <div className="animate-fade-in">
@@ -149,8 +111,8 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
                 accountType === "director" ? "border-accent bg-accent-soft" : "border-border bg-surface-1 hover:border-border-strong"
               )}
             >
-              <p className="font-semibold text-text-primary">Club Director</p>
-              <p className="mt-1 text-sm text-text-secondary">Create and run a new club — events, members, announcements, and more.</p>
+              <p className="font-semibold text-text-primary">Teacher</p>
+              <p className="mt-1 text-sm text-text-secondary">Run and supervise a club — events, members, announcements, and more.</p>
             </button>
           </div>
 
@@ -211,12 +173,13 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
             <Button
               size="lg"
               className="flex-1"
-              disabled={!schoolName.trim()}
-              onClick={() => setStep(accountType === "student" ? "clubs" : "club-create")}
+              disabled={!schoolName.trim() || pending}
+              onClick={() => (accountType === "student" ? setStep("clubs") : submitDirector())}
             >
-              Continue
+              {accountType === "director" && pending ? "Setting up…" : "Continue"}
             </Button>
           </div>
+          {accountType === "director" && <FieldError>{error}</FieldError>}
         </div>
       )}
 
@@ -311,57 +274,6 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
         </div>
       )}
 
-      {step === "club-create" && accountType === "director" && (
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary">Create your club</h1>
-          <p className="mt-1 text-[15px] text-text-secondary">No approval needed — you&rsquo;ll be the club owner immediately.</p>
-
-          <div className="mt-6 space-y-4">
-            <div>
-              <Label htmlFor="clubName">Club name</Label>
-              <Input id="clubName" value={clubName} onChange={(e) => setClubName(e.target.value)} placeholder="e.g. Interact Club" />
-              {similarClubs.length > 0 && (
-                <div className="mt-2 rounded-xl border border-warning/30 bg-warning-soft p-3 text-sm text-warning">
-                  <p className="font-medium">A club with a similar name may already exist:</p>
-                  <ul className="mt-1 list-disc pl-4">
-                    {similarClubs.map((c) => (
-                      <li key={c.id}>{c.name}</li>
-                    ))}
-                  </ul>
-                  <p className="mt-1 text-xs">You can still continue if this is genuinely a different club.</p>
-                </div>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="clubDescription">Description</Label>
-              <Textarea id="clubDescription" rows={3} value={clubDescription} onChange={(e) => setClubDescription(e.target.value)} />
-            </div>
-            <div>
-              <Label>Category</Label>
-              <CategoryMultiSelect value={categories} onChange={setCategories} />
-            </div>
-            <div>
-              <Label>Club color</Label>
-              <ClubColorPicker value={color} onChange={setColor} takenColors={takenColors} />
-            </div>
-            <div>
-              <Label htmlFor="meetingSchedule">Meeting schedule (optional)</Label>
-              <Input id="meetingSchedule" value={meetingSchedule} onChange={(e) => setMeetingSchedule(e.target.value)} placeholder="e.g. Tuesdays 3:30 PM, Room 204" />
-            </div>
-          </div>
-
-          <FieldError>{error}</FieldError>
-
-          <div className="mt-8 flex gap-3">
-            <Button variant="secondary" size="lg" onClick={() => setStep("basics")}>
-              Back
-            </Button>
-            <Button size="lg" className="flex-1" onClick={submitDirector} disabled={pending}>
-              {pending ? "Creating club…" : "Complete Registration"}
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
