@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 // Short-lived cookie carrying a random value across the redirect to Google
 // and back, so the callback can confirm the response really originated from
@@ -7,13 +8,13 @@ import crypto from "crypto";
 const STATE_COOKIE = "clubsync_oauth_state";
 
 export async function GET(request: Request) {
+  const origin = getRequestOrigin(request);
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
-    return NextResponse.redirect(new URL("/login?error=google_not_configured", request.url));
+    return NextResponse.redirect(new URL("/login?error=google_not_configured", origin));
   }
 
   const state = crypto.randomBytes(24).toString("hex");
-  const origin = new URL(request.url).origin;
 
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authUrl.searchParams.set("client_id", clientId);

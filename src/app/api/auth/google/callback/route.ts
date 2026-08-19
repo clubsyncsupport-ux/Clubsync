@@ -3,11 +3,13 @@ import { cookies } from "next/headers";
 import { authProvider } from "@/lib/auth";
 import { setSessionCookie } from "@/lib/auth/session";
 import { resolveLandingPath } from "@/lib/viewer";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 const STATE_COOKIE = "clubsync_oauth_state";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const origin = getRequestOrigin(request);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const googleError = url.searchParams.get("error");
@@ -18,16 +20,16 @@ export async function GET(request: Request) {
 
   if (googleError) {
     // The student closed/cancelled Google's consent screen — not a real error.
-    return NextResponse.redirect(new URL("/login?error=google_cancelled", url.origin));
+    return NextResponse.redirect(new URL("/login?error=google_cancelled", origin));
   }
   if (!code || !state || !expectedState || state !== expectedState) {
-    return NextResponse.redirect(new URL("/login?error=google_failed", url.origin));
+    return NextResponse.redirect(new URL("/login?error=google_failed", origin));
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL("/login?error=google_not_configured", url.origin));
+    return NextResponse.redirect(new URL("/login?error=google_not_configured", origin));
   }
 
   try {
@@ -38,7 +40,7 @@ export async function GET(request: Request) {
         code,
         client_id: clientId,
         client_secret: clientSecret,
-        redirect_uri: `${url.origin}/api/auth/google/callback`,
+        redirect_uri: `${origin}/api/auth/google/callback`,
         grant_type: "authorization_code",
       }),
     });
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
       await profileRes.json();
 
     if (!profile.email || profile.email_verified === false) {
-      return NextResponse.redirect(new URL("/login?error=google_unverified_email", url.origin));
+      return NextResponse.redirect(new URL("/login?error=google_unverified_email", origin));
     }
 
     const result = await authProvider.signInWithGoogle({
@@ -65,8 +67,8 @@ export async function GET(request: Request) {
     });
 
     await setSessionCookie(result.sessionToken, result.expiresAt);
-    return NextResponse.redirect(new URL(await resolveLandingPath(result.user.id), url.origin));
+    return NextResponse.redirect(new URL(await resolveLandingPath(result.user.id), origin));
   } catch {
-    return NextResponse.redirect(new URL("/login?error=google_failed", url.origin));
+    return NextResponse.redirect(new URL("/login?error=google_failed", origin));
   }
 }
