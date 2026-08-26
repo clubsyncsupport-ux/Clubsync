@@ -21,7 +21,7 @@ export async function updateProfileAction(_prev: SettingsState, formData: FormDa
   const existing = await db.user.findFirst({ where: { email, NOT: { id: user.id } } });
   if (existing) return { error: "That email is already in use." };
 
-  let avatarUrl: string | undefined;
+  let avatarUrl: string | null | undefined;
   const avatarFile = formData.get("avatar");
   if (avatarFile instanceof File && avatarFile.size > 0) {
     try {
@@ -30,11 +30,13 @@ export async function updateProfileAction(_prev: SettingsState, formData: FormDa
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Failed to upload image." };
     }
+  } else if (formData.get("removeAvatar") === "true") {
+    avatarUrl = null;
   }
 
   await db.user.update({
     where: { id: user.id },
-    data: { firstName, lastName, email, bio: bio || null, ...(avatarUrl ? { avatarUrl } : {}) },
+    data: { firstName, lastName, email, bio: bio || null, ...(avatarUrl !== undefined ? { avatarUrl } : {}) },
   });
 
   revalidatePath("/settings");

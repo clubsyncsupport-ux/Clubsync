@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateProfileAction } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, FieldError } from "@/components/ui/input";
@@ -21,6 +21,7 @@ export function ProfileForm({
   avatarUrl: string | null;
 }) {
   const [state, formAction, pending] = useActionState(updateProfileAction, { error: null });
+  const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   return (
     <Card>
@@ -42,10 +43,13 @@ export function ProfileForm({
                   {lastName[0]}
                 </span>
               }
+              onRemove={avatarUrl ? () => setAvatarRemoved(true) : undefined}
+              onFileSelected={() => setAvatarRemoved(false)}
             />
+            <input type="hidden" name="removeAvatar" value={avatarRemoved ? "true" : ""} />
             <div>
               <p className="text-sm font-medium text-text-primary">Profile picture</p>
-              <p className="text-xs text-text-muted">Click your photo to change it.</p>
+              <p className="text-xs text-text-muted">Click your photo to change it, or remove it to use your initials instead.</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -17,6 +17,8 @@ export function ImageUploadField({
   fallback,
   helperText,
   ariaLabel = "Change photo",
+  onRemove,
+  onFileSelected,
 }: {
   name: string;
   currentUrl?: string | null;
@@ -27,13 +29,26 @@ export function ImageUploadField({
   fallback?: React.ReactNode;
   helperText?: string;
   ariaLabel?: string;
+  /** Pass to allow clearing back to `fallback` — omit to keep this field upload-only. */
+  onRemove?: () => void;
+  onFileSelected?: () => void;
 }) {
   const [preview, setPreview] = useState<string | null>(currentUrl ?? null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) setPreview(URL.createObjectURL(file));
+    if (file) {
+      setPreview(URL.createObjectURL(file));
+      onFileSelected?.();
+    }
+  }
+
+  function handleRemove(e: React.MouseEvent) {
+    e.stopPropagation();
+    setPreview(null);
+    if (inputRef.current) inputRef.current.value = "";
+    onRemove?.();
   }
 
   return (
@@ -67,6 +82,11 @@ export function ImageUploadField({
         )}
       </button>
       <input ref={inputRef} type="file" name={name} accept="image/*" className="hidden" onChange={handleChange} />
+      {onRemove && preview && (
+        <button type="button" onClick={handleRemove} className="mt-1.5 block text-xs text-text-muted underline hover:text-text-primary">
+          Remove photo
+        </button>
+      )}
       {helperText && <p className="mt-1.5 text-xs text-text-muted">{helperText}</p>}
     </div>
   );
