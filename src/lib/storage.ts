@@ -1,12 +1,14 @@
 import "server-only";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
+import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import path from "path";
 
-// Local filesystem storage under public/uploads, served statically by Next.js.
-// Swapping to cloud object storage later means replacing this one function —
-// callers only ever deal with the returned public URL.
-const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
+// Supabase Storage, in the public "uploads" bucket. Vercel's serverless
+// functions have no persistent local disk, so files can't be written to
+// the filesystem the way they could on Railway — object storage replaces
+// that. Callers only ever deal with the returned public URL either way.
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
+const BUCKET = "uploads";
 
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf"]);
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -17,13 +19,18 @@ export async function saveUploadedFile(file: File, subdir: string): Promise<{ ur
 
   const ext = path.extname(file.name) || guessExtension(file.type);
   const safeName = `${crypto.randomUUID()}${ext}`;
-  const dir = path.join(UPLOAD_ROOT, subdir);
-  await mkdir(dir, { recursive: true });
+  const objectPath = `${subdir}/${safeName}`;
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(dir, safeName), buffer);
+  const { error } = await supabase.storage.from(BUCKET).upload(objectPath, buffer, {
+    contentType: file.type,
+    upsert: false,
+  });
+  if (error) throw new Error(`Upload failed: ${error.message}`);
 
-  return { url: `/uploads/${subdir}/${safeName}`, filename: file.name, size: file.size, mimeType: file.type };
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(objectPath);
+
+  return { url: data.publicUrl, filename: file.name, size: file.size, mimeType: file.type };
 }
 
 function guessExtension(mimeType: string) {
