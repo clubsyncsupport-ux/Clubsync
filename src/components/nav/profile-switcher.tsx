@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useOnClickOutside } from "@/lib/use-on-click-outside";
 import { Avatar } from "@/components/ui/avatar";
@@ -40,9 +40,16 @@ export function ProfileSwitcher({
   placement?: "below-right" | "above-left";
 }) {
   const [open, setOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useOnClickOutside(ref, () => setOpen(false));
+
+  function switchTo(profile: ActiveProfile) {
+    startTransition(() => {
+      switchProfileAction(profile);
+    });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -103,11 +110,11 @@ export function ProfileSwitcher({
                 icon={User}
                 label="Student"
                 selected={active.kind === "student"}
-                onClick={() => switchProfileAction({ kind: "student" })}
+                onClick={() => switchTo({ kind: "student" })}
               />
             )}
             {isAdmin && (
-              <ProfileRow icon={Wrench} label="Platform Admin" selected={active.kind === "admin"} onClick={() => switchProfileAction({ kind: "admin" })} />
+              <ProfileRow icon={Wrench} label="Platform Admin" selected={active.kind === "admin"} onClick={() => switchTo({ kind: "admin" })} />
             )}
             {directorClubs.length > 0 && (
               <p className="mt-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">My Clubs</p>
@@ -118,7 +125,7 @@ export function ProfileSwitcher({
                 icon={Shield}
                 label={c.name}
                 selected={active.kind === "director" && active.clubId === c.id}
-                onClick={() => switchProfileAction({ kind: "director", clubId: c.id })}
+                onClick={() => switchTo({ kind: "director", clubId: c.id })}
               />
             ))}
             {schoolAdminOf && (
@@ -126,7 +133,7 @@ export function ProfileSwitcher({
                 icon={School}
                 label={`${schoolAdminOf.name} Admin`}
                 selected={active.kind === "school-admin" && active.schoolId === schoolAdminOf.id}
-                onClick={() => switchProfileAction({ kind: "school-admin", schoolId: schoolAdminOf.id })}
+                onClick={() => switchTo({ kind: "school-admin", schoolId: schoolAdminOf.id })}
               />
             )}
             <Link
