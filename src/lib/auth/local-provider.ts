@@ -4,6 +4,11 @@ import { db } from "@/lib/db";
 import type { AuthProvider, AuthResult, GoogleProfile, SignInInput, SignUpInput } from "./types";
 
 const SESSION_DAYS = 30;
+// Login rate-limiting: after this many consecutive wrong passwords, the
+// account is locked for LOCKOUT_MINUTES regardless of whether a later
+// attempt has the correct password — see signIn() below.
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_MINUTES = 15;
 
 function toSessionUser(u: { id: string; email: string; firstName: string; lastName: string }) {
   return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName };
@@ -71,8 +76,23 @@ export const localAuthProvider: AuthProvider = {
     if (!user || !user.passwordHash) {
       return { ok: false, error: "Incorrect email or password." };
     }
+
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+      return { ok: false, error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` };
+    }
+
     const valid = await bcrypt.compare(input.password, user.passwordHash);
-    if (!valid) return { ok: false, error: "Incorrect email or password." };
+    if (!valid) {
+      const attempts = user.failedLoginAttempts + 1;
+      const lockedUntil = attempts >= LOCKOUT_THRESHOLD ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000) : null;
+      await db.user.update({ where: { id: user.id }, data: { failedLoginAttempts: attempts, lockedUntil } });
+      return { ok: false, error: "Incorrect email or password." };
+    }
+
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await db.user.update({ where: { id: user.id }, data: { failedLoginAttempts: 0, lockedUntil: null } });
+    }
 
     const { token, expiresAt } = await createSession(user.id);
     return { ok: true, user: toSessionUser(user), sessionToken: token, expiresAt };

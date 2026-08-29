@@ -44,6 +44,13 @@ model User {
   platformRole      String   @default("STUDENT")
   // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED"
   accountStatus     String   @default("ACTIVE")
+  // Login rate-limiting: counts consecutive failed password attempts, reset
+  // to 0 on a successful login. Once it crosses LOCKOUT_THRESHOLD (see
+  // local-provider.ts), lockedUntil is set and further attempts are refused
+  // until that time passes, regardless of whether the password given is
+  // actually correct.
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
   // Set when this account has been merged into another (see mergeUserAccountsAction) —
   // its club memberships, service-hour records, and event registrations have been
   // moved to mergedIntoId, and this account can no longer log in. Plain id reference,
