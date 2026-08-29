@@ -25,7 +25,7 @@ export function OnboardingWizard({ firstName, schoolNames }: { firstName: string
   const [step, setStep] = useState<Step>("type");
   const [accountType, setAccountType] = useState<AccountType>("student");
   const [grade, setGrade] = useState("Grade 10");
-  const [schoolName, setSchoolName] = useState(schoolNames[0] ?? DEFAULT_SCHOOL);
+  const [schoolName, setSchoolName] = useState("");
   const [serviceHourGoal, setServiceHourGoal] = useState("50");
 
   const [clubs, setClubs] = useState<{ id: string; name: string; category: string; color: string; description: string }[]>([]);
