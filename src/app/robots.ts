@@ -25,7 +25,6 @@ export default function robots(): MetadataRoute.Robots {
         "/onboarding",
         "/access-denied",
         "/suspended",
-        "/reset-password",
         "/api/",
       ],
     },

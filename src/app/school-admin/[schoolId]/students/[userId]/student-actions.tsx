@@ -2,17 +2,37 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { suspendUserAction, reactivateUserAction, deleteUserAction } from "@/app/actions/admin";
+import { suspendUserAction, reactivateUserAction, deleteUserAction, adminResetPasswordAction } from "@/app/actions/admin";
 import { Button } from "@/components/ui/button";
 
 export function StudentActions({ schoolId, userId, accountStatus }: { schoolId: string; userId: string; accountStatus: string }) {
   const [pending, startTransition] = useTransition();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
   const router = useRouter();
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {accountStatus === "SUSPENDED" ? (
+    <div className="flex flex-col gap-3">
+      {tempPassword && (
+        <div className="rounded-xl border border-accent/30 bg-accent-soft p-4 text-sm text-accent-soft-text">
+          <p className="font-medium">New temporary password — give this to the account owner directly, it won&rsquo;t be shown again:</p>
+          <p className="mt-2 break-all font-mono text-base">{tempPassword}</p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          disabled={pending}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await adminResetPasswordAction(userId);
+              setTempPassword(result.tempPassword);
+            })
+          }
+        >
+          Reset Password
+        </Button>
+        {accountStatus === "SUSPENDED" ? (
         <Button variant="secondary" disabled={pending} onClick={() => startTransition(() => reactivateUserAction(userId))}>
           Reactivate Account
         </Button>
@@ -40,6 +60,7 @@ export function StudentActions({ schoolId, userId, accountStatus }: { schoolId: 
           Delete Account
         </Button>
       )}
+      </div>
     </div>
   );
 }

@@ -54,6 +54,10 @@ export interface AuthProvider {
   // `devResetUrl` is only ever populated by providers with no real email
   // delivery (i.e. the local provider) — shown on-screen instead of emailed.
   // A Firebase-backed provider would send its own email and omit it.
-  requestPasswordReset(email: string): Promise<{ ok: true; devResetUrl?: string } | { ok: false; error: string }>;
-  resetPassword(token: string, newPassword: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  // Self-service password reset is intentionally not implemented — there's
+  // no email provider connected, and handing the reset link straight back to
+  // whoever typed in an email (rather than the account's real owner) would
+  // let anyone take over any account just by knowing its address. Until real
+  // email delivery exists, password resets go through an admin instead (see
+  // adminResetPasswordAction in src/app/actions/admin.ts).
 }

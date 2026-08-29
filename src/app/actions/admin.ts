@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { requireAdmin, logAudit } from "@/lib/admin";
 import { getSchoolAdminContextForClub, requireSchoolAccessForUser } from "@/lib/school-admin";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
@@ -50,6 +52,28 @@ export async function deleteUserAction(userId: string) {
     redirect(`/school-admin/${me.schoolAdminOfId}/students`);
   }
   redirect("/admin/users");
+}
+
+// Stand-in for self-service password reset until a real email provider is
+// connected (see the note on AuthProvider.requestPasswordReset). The admin
+// generates a temporary password here and relays it to the account owner
+// directly — unlike the old self-service flow, this requires the admin to
+// actually know who they're handing access to.
+const TEMP_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+
+export async function adminResetPasswordAction(userId: string): Promise<{ tempPassword: string }> {
+  const { me } = await requireSchoolAccessForUser(userId);
+
+  const tempPassword = Array.from(crypto.randomFillSync(new Uint8Array(12)))
+    .map((n) => TEMP_PASSWORD_CHARS[n % TEMP_PASSWORD_CHARS.length])
+    .join("");
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+  await db.user.update({ where: { id: userId }, data: { passwordHash } });
+  await db.session.deleteMany({ where: { userId } });
+  await logAudit(me.id, "ADMIN_RESET_PASSWORD", "User", userId);
+
+  return { tempPassword };
 }
 
 export type GrantAdminState = { error: string | null; success?: boolean };

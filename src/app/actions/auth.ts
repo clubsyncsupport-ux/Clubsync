@@ -40,23 +40,3 @@ export async function logoutAction() {
   redirect("/welcome");
 }
 
-export type ResetRequestState = { error: string | null; devResetUrl?: string };
-
-export async function requestPasswordResetAction(_prev: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
-  const email = String(formData.get("email") ?? "").trim();
-  if (!email) return { error: "Enter your email." };
-  const result = await authProvider.requestPasswordReset(email);
-  if (!result.ok) return { error: result.error };
-  return { error: null, devResetUrl: result.devResetUrl };
-}
-
-export async function resetPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
-  const token = String(formData.get("token") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const confirm = String(formData.get("confirmPassword") ?? "");
-  if (password !== confirm) return { error: "Passwords don't match." };
-
-  const result = await authProvider.resetPassword(token, password);
-  if (!result.ok) return { error: result.error };
-  redirect("/login");
-}

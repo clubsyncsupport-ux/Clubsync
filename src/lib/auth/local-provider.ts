@@ -126,36 +126,4 @@ export const localAuthProvider: AuthProvider = {
     return { ok: true };
   },
 
-  async requestPasswordReset(email: string) {
-    const identifier = email.trim().toLowerCase();
-    const user = await db.user.findUnique({ where: { email: identifier } });
-    // Always report success even if not found, so this can't be used to enumerate accounts.
-    if (!user) return { ok: true };
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-    await db.passwordResetToken.create({ data: { userId: user.id, tokenHash: hashToken(token), expiresAt } });
-
-    // No email provider is connected yet, so the reset link is surfaced
-    // directly in the UI instead of being emailed. Swap this out once a
-    // real email/Firebase provider is wired up.
-    return { ok: true, devResetUrl: `/reset-password?token=${token}` };
-  },
-
-  async resetPassword(token: string, newPassword: string) {
-    const record = await db.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
-    if (!record || record.expiresAt < new Date()) {
-      return { ok: false, error: "This reset link is invalid or has expired." };
-    }
-    const passwordError = validatePassword(newPassword);
-    if (passwordError) return { ok: false, error: passwordError };
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.$transaction([
-      db.user.update({ where: { id: record.userId }, data: { passwordHash } }),
-      db.passwordResetToken.delete({ where: { id: record.id } }),
-      db.session.deleteMany({ where: { userId: record.userId } }),
-    ]);
-    return { ok: true };
-  },
 };
