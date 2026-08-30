@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { sendPasswordResetEmail } from "@/lib/email";
 import type { AuthProvider, AuthResult, GoogleProfile, SignInInput, SignUpInput } from "./types";
 
 const SESSION_DAYS = 30;
@@ -146,4 +147,36 @@ export const localAuthProvider: AuthProvider = {
     return { ok: true };
   },
 
+  async requestPasswordReset(email: string) {
+    const identifier = email.trim().toLowerCase();
+    const user = await db.user.findUnique({ where: { email: identifier } });
+    // Always report success even if not found, so this can't be used to enumerate accounts.
+    if (!user || !user.passwordHash) return { ok: true };
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await db.passwordResetToken.create({ data: { userId: user.id, tokenHash: hashToken(token), expiresAt } });
+
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    await sendPasswordResetEmail(user.email, `${baseUrl}/reset-password?token=${token}`);
+
+    return { ok: true };
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const record = await db.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
+    if (!record || record.expiresAt < new Date()) {
+      return { ok: false, error: "This reset link is invalid or has expired." };
+    }
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) return { ok: false, error: passwordError };
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await db.$transaction([
+      db.user.update({ where: { id: record.userId }, data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null } }),
+      db.passwordResetToken.delete({ where: { id: record.id } }),
+      db.session.deleteMany({ where: { userId: record.userId } }),
+    ]);
+    return { ok: true };
+  },
 };

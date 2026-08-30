@@ -40,3 +40,22 @@ export async function logoutAction() {
   redirect("/welcome");
 }
 
+export type ResetRequestState = { error: string | null; submitted?: boolean };
+
+export async function requestPasswordResetAction(_prev: ResetRequestState, formData: FormData): Promise<ResetRequestState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Enter your email." };
+  await authProvider.requestPasswordReset(email);
+  return { error: null, submitted: true };
+}
+
+export async function resetPasswordAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirmPassword") ?? "");
+  if (password !== confirm) return { error: "Passwords don't match." };
+
+  const result = await authProvider.resetPassword(token, password);
+  if (!result.ok) return { error: result.error };
+  redirect("/login");
+}
