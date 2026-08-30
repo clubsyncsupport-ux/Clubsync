@@ -9,22 +9,12 @@ import { switchProfileAction } from "@/app/actions/profile";
 import { logoutAction } from "@/app/actions/auth";
 import { cn } from "@/lib/cn";
 import type { ActiveProfile } from "@/lib/auth/session";
-import { User, Wrench, Shield, School, Plus, Settings, LogOut, type LucideIcon } from "lucide-react";
+import { User, Wrench, Shield, School, Plus, Settings, LogOut, LayoutDashboard, type LucideIcon } from "lucide-react";
 
 type DirectorClub = { id: string; name: string; color: string };
 type SchoolAdminOf = { id: string; name: string };
 
-export function ProfileSwitcher({
-  firstName,
-  lastName,
-  avatarUrl,
-  directorClubs,
-  schoolAdminOf = null,
-  isAdmin,
-  isStaff = false,
-  active,
-  placement = "below-right",
-}: {
+type ProfileSwitcherProps = {
   firstName: string;
   lastName: string;
   avatarUrl: string | null;
@@ -39,23 +29,34 @@ export function ProfileSwitcher({
    * trigger pinned to the bottom-left of the screen (the desktop sidebar),
    * where opening downward/rightward would run off the viewport. */
   placement?: "below-right" | "above-left";
-}) {
+};
+
+// This component lives in the persistent app layout, so it survives page
+// navigation rather than remounting — closing it from a menu item's onClick
+// races against Next's own client-side transition and isn't reliable.
+// Keying the actual menu on the pathname makes React remount it (resetting
+// `open` to false) on every route change, without an effect calling setState.
+export function ProfileSwitcher(props: ProfileSwitcherProps) {
+  const pathname = usePathname();
+  return <ProfileSwitcherMenu key={pathname} {...props} />;
+}
+
+function ProfileSwitcherMenu({
+  firstName,
+  lastName,
+  avatarUrl,
+  directorClubs,
+  schoolAdminOf = null,
+  isAdmin,
+  isStaff = false,
+  active,
+  placement = "below-right",
+}: ProfileSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useOnClickOutside(ref, () => setOpen(false));
-
-  // This component lives in the persistent app layout, so it survives page
-  // navigation rather than remounting — closing it from a menu item's onClick
-  // races against Next's own client-side transition and isn't reliable.
-  // Reacting to the URL actually changing is the robust way to close it,
-  // and covers every path that navigates away (Link clicks, the redirect()
-  // inside switchProfileAction, back/forward) with one rule.
-  const pathname = usePathname();
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   function switchTo(profile: ActiveProfile) {
     startTransition(() => {
@@ -127,6 +128,16 @@ export function ProfileSwitcher({
             )}
             {isAdmin && (
               <ProfileRow icon={Wrench} label="Platform Admin" selected={active.kind === "admin"} onClick={() => switchTo({ kind: "admin" })} />
+            )}
+            {isStaff && (
+              <Link
+                href="/teacher"
+                role="menuitem"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-2"
+              >
+                <LayoutDashboard className="h-[18px] w-[18px]" strokeWidth={2} />
+                Teacher Dashboard
+              </Link>
             )}
             {directorClubs.length > 0 && (
               <p className="mt-2 px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-text-muted">My Clubs</p>

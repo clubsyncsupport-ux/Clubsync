@@ -28,6 +28,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { ColorDot } from "@/components/ui/badge";
 import { ClubFilterLegend } from "@/components/club-filter-legend";
+import { ConnectGoogleCalendarPrompt } from "@/components/connect-google-calendar-prompt";
 import { AddPersonalEvent } from "./add-personal-event";
 import { PersonalEventRow } from "./personal-event-row";
 import { ColorIndex } from "./color-index";
@@ -146,6 +147,12 @@ export default async function CalendarPage({
               {c.name}
             </div>
           ))}
+        </div>
+      )}
+
+      {!viewer.googleCalendarRefreshToken && (
+        <div className="mt-3">
+          <ConnectGoogleCalendarPrompt />
         </div>
       )}
 

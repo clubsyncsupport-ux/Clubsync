@@ -11,6 +11,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
   const NAV: { href: string; label: string; icon: NavIconName; badge?: boolean }[] = [
     { href: "/teacher", label: "Dashboard", icon: "LayoutDashboard" },
     { href: "/teacher/supervising-requests", label: "Supervising Requests", icon: "ClipboardList", badge: pendingCount > 0 },
+    { href: "/teacher/calendar", label: "Calendar", icon: "CalendarDays" },
   ];
 
   return (
