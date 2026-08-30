@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useOnClickOutside } from "@/lib/use-on-click-outside";
 import { Avatar } from "@/components/ui/avatar";
 import { switchProfileAction } from "@/app/actions/profile";
@@ -44,6 +45,17 @@ export function ProfileSwitcher({
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   useOnClickOutside(ref, () => setOpen(false));
+
+  // This component lives in the persistent app layout, so it survives page
+  // navigation rather than remounting — closing it from a menu item's onClick
+  // races against Next's own client-side transition and isn't reliable.
+  // Reacting to the URL actually changing is the robust way to close it,
+  // and covers every path that navigates away (Link clicks, the redirect()
+  // inside switchProfileAction, back/forward) with one rule.
+  const pathname = usePathname();
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   function switchTo(profile: ActiveProfile) {
     startTransition(() => {
@@ -147,7 +159,11 @@ export function ProfileSwitcher({
           </div>
 
           <div className="border-t border-border p-2">
-            <Link href="/settings" role="menuitem" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-text-primary hover:bg-surface-2">
+            <Link
+              href="/settings"
+              role="menuitem"
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-text-primary hover:bg-surface-2"
+            >
               <Settings className="h-[18px] w-[18px]" strokeWidth={2} /> Settings
             </Link>
             <form action={logoutAction}>
