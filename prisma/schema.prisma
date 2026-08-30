@@ -32,6 +32,12 @@ model User {
   // signs in with Google (whether that's a brand-new account or linking an
   // existing password account that shares the same email). Null otherwise.
   googleId          String?  @unique
+  // Set only if this person has separately connected Google Calendar (a
+  // different, extra permission from signing in with Google — see
+  // /api/auth/google-calendar/*). One-directional: read-only, used to show
+  // their personal events alongside club ones. ClubSync never writes to it.
+  googleCalendarRefreshToken String?
+  googleCalendarConnectedAt  DateTime?
   firstName         String
   lastName          String
   avatarUrl         String?

@@ -49,6 +49,16 @@ export async function updateThemeAction(theme: "light" | "dark" | "system") {
   await db.user.update({ where: { id: user.id }, data: { theme } });
 }
 
+export async function disconnectGoogleCalendarAction() {
+  const user = await requireUser();
+  await db.user.update({
+    where: { id: user.id },
+    data: { googleCalendarRefreshToken: null, googleCalendarConnectedAt: null },
+  });
+  revalidatePath("/settings");
+  revalidatePath("/calendar");
+}
+
 export async function updateCalendarPrefsAction(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
   const user = await requireUser();
   const reminderOffsets = formData.getAll("reminderOffsets").map(String).join(",") || "1440";

@@ -4,6 +4,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { ProfileForm } from "./profile-form";
 import { ThemeSelector } from "./theme-selector";
 import { CalendarPrefsForm } from "./calendar-prefs-form";
+import { GoogleCalendarCard } from "./google-calendar-card";
 import { ServiceHourGoalForm } from "./service-hour-goal-form";
 import { ChangePasswordForm } from "./change-password-form";
 import { InstallAppCard } from "./install-app-card";
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
         timeFormat={viewer.timeFormat}
         reminderOffsets={viewer.reminderOffsets}
       />
+      <GoogleCalendarCard connected={!!viewer.googleCalendarConnectedAt} />
       <ServiceHourGoalForm current={viewer.serviceHourGoal} />
       <ChangePasswordForm />
       <InstallAppCard />

@@ -20,6 +20,7 @@ import {
 } from "date-fns";
 import { getViewer } from "@/lib/viewer";
 import { getVisibleEvents } from "@/lib/data/calendar";
+import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { EventCard } from "@/components/event-card";
@@ -33,6 +34,7 @@ import { ColorIndex } from "./color-index";
 
 type ViewType = "month" | "week" | "day" | "agenda";
 const PERSONAL_COLOR = "#6b7280";
+const GOOGLE_COLOR = "#4285f4";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -64,7 +66,7 @@ export default async function CalendarPage({
     rangeEnd = addDays(refDate, 60);
   }
 
-  const [clubEvents, personalEvents, categories] = await Promise.all([
+  const [clubEvents, personalEvents, categories, googleEvents] = await Promise.all([
     clubIds.length ? getVisibleEvents(viewer.id, clubIds, rangeStart, rangeEnd) : Promise.resolve([]),
     db.personalEvent.findMany({
       where: { userId: viewer.id, startAt: { gte: rangeStart, lte: rangeEnd } },
@@ -72,6 +74,9 @@ export default async function CalendarPage({
       orderBy: { startAt: "asc" },
     }),
     db.personalEventCategory.findMany({ where: { userId: viewer.id }, orderBy: { name: "asc" } }),
+    viewer.googleCalendarRefreshToken
+      ? getGoogleCalendarEvents(viewer.id, viewer.googleCalendarRefreshToken, rangeStart, rangeEnd)
+      : Promise.resolve([]),
   ]);
 
   const items: CalendarItem[] = [
@@ -89,6 +94,7 @@ export default async function CalendarPage({
       color: e.category?.color ?? PERSONAL_COLOR,
       personal: e,
     })),
+    ...googleEvents.map((e) => ({ id: e.id, kind: "google" as const, title: e.title, startAt: e.startAt, color: GOOGLE_COLOR })),
   ].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 
   const { prevHref, nextHref, title } = getNav(view, refDate);
@@ -195,7 +201,26 @@ type PersonalEventData = {
 
 type CalendarItem =
   | { id: string; kind: "club"; title: string; startAt: Date; color: string; isFull: boolean; event: ClubEventWithClub }
-  | { id: string; kind: "personal"; title: string; startAt: Date; color: string; personal: PersonalEventData };
+  | { id: string; kind: "personal"; title: string; startAt: Date; color: string; personal: PersonalEventData }
+  | { id: string; kind: "google"; title: string; startAt: Date; color: string };
+
+function CalendarItemRow({ item }: { item: CalendarItem }) {
+  if (item.kind === "club") return <EventCard event={item.event} full={item.isFull} />;
+  if (item.kind === "personal") return <PersonalEventRow event={item.personal} />;
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border-strong bg-surface-1 p-4">
+      <div className="h-11 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="truncate">Google Calendar</span>
+        </div>
+        <p className="mt-0.5 truncate font-semibold text-text-primary">{item.title}</p>
+        <p className="mt-0.5 text-sm text-text-secondary">{format(item.startAt, "MMM d, h:mm a")}</p>
+      </div>
+    </div>
+  );
+}
 
 function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] }) {
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(refDate)), end: endOfWeek(endOfMonth(refDate)) });
@@ -243,7 +268,7 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
                     data-club-id={it.kind === "club" ? it.event.club.id : undefined}
                     className={cn(
                       "truncate rounded px-1 py-0.5 text-[10px] font-medium text-white sm:text-[11px]",
-                      it.kind === "personal" && "border border-dashed border-white/60"
+                      (it.kind === "personal" || it.kind === "google") && "border border-dashed border-white/60"
                     )}
                     style={{ backgroundColor: it.color }}
                   >
@@ -315,9 +340,9 @@ function DayList({ refDate, items }: { refDate: Date; items: CalendarItem[] }) {
   }
   return (
     <div className="space-y-2">
-      {dayItems.map((it) =>
-        it.kind === "club" ? <EventCard key={it.id} event={it.event} full={it.isFull} /> : <PersonalEventRow key={it.id} event={it.personal} />
-      )}
+      {dayItems.map((it) => (
+        <CalendarItemRow key={it.id} item={it} />
+      ))}
     </div>
   );
 }
@@ -342,9 +367,9 @@ function AgendaList({ items }: { items: CalendarItem[] }) {
         <div key={key}>
           <p className="mb-2 text-sm font-semibold text-text-secondary">{format(parseISO(key), "EEEE, MMMM d")}</p>
           <div className="space-y-2">
-            {dayItems.map((it) =>
-              it.kind === "club" ? <EventCard key={it.id} event={it.event} full={it.isFull} /> : <PersonalEventRow key={it.id} event={it.personal} />
-            )}
+            {dayItems.map((it) => (
+              <CalendarItemRow key={it.id} item={it} />
+            ))}
           </div>
         </div>
       ))}
