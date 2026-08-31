@@ -205,21 +205,40 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
 export async function cancelEventAction(eventId: string) {
   const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
   await getDirectorContext(event.clubId);
-  await db.event.update({ where: { id: eventId }, data: { status: "CANCELLED" } });
+  await cancelOneEvent(event.id, event.clubId, event.title);
+  revalidatePath(`/director/${event.clubId}/events`);
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  revalidatePath("/calendar");
+}
 
+async function cancelOneEvent(eventId: string, clubId: string, title: string) {
+  await db.event.update({ where: { id: eventId }, data: { status: "CANCELLED" } });
   const registrants = await db.eventRegistration.findMany({ where: { eventId, status: "REGISTERED" } });
   await db.notification.createMany({
     data: registrants.map((r) => ({
       userId: r.userId,
       type: "REGISTRATION" as const,
       title: "Event cancelled",
-      body: event.title,
+      body: title,
       linkUrl: `/events/${eventId}`,
     })),
   });
+}
 
-  revalidatePath(`/director/${event.clubId}/events`);
+// Cancels a specific subset of a recurring series' occurrences (director
+// picks which dates from a checklist) instead of only being able to cancel
+// one occurrence at a time. Re-verifies every event actually belongs to the
+// given club — the picker only ever offers a series' own occurrences, but
+// never trust a client-supplied id list without checking server-side.
+export async function cancelRecurringEventsAction(clubId: string, eventIds: string[]) {
+  await getDirectorContext(clubId);
+  const events = await db.event.findMany({ where: { id: { in: eventIds }, clubId, status: { not: "CANCELLED" } } });
+  for (const event of events) {
+    await cancelOneEvent(event.id, clubId, event.title);
+  }
+  revalidatePath(`/director/${clubId}/events`);
   revalidatePath("/calendar");
+  return { cancelledCount: events.length };
 }
 
 export async function markEventCompletedAction(eventId: string) {
@@ -427,6 +446,62 @@ export async function markAttendanceAction(eventId: string, userId: string, atte
   revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
   revalidatePath(`/director/${event.clubId}/attendance`);
   revalidatePath("/service-hours");
+}
+
+// Defaults everyone still sitting in "REGISTERED" to ATTENDED once an
+// attendance-enabled event's start time has passed — a director shouldn't
+// have to manually click every single name; they only need to change the
+// handful who actually didn't show up (still fully overridable afterward,
+// same as any other attendance mark). Only ever moves people forward from
+// REGISTERED, never touches someone already marked ATTENDED/NO_SHOW.
+export async function autoMarkAttendedIfPastAction(eventId: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  if (!event.attendanceEnabled || event.startAt > new Date()) return { markedCount: 0 };
+
+  const { user } = await getDirectorContext(event.clubId);
+  const stillRegistered = await db.eventRegistration.findMany({ where: { eventId, status: "REGISTERED" } });
+  if (stillRegistered.length === 0) return { markedCount: 0 };
+
+  await db.eventRegistration.updateMany({
+    where: { eventId, status: "REGISTERED" },
+    data: { status: "ATTENDED" },
+  });
+
+  if (event.awardsServiceHours) {
+    const existing = await db.serviceHourRecord.findMany({
+      where: { eventId, userId: { in: stillRegistered.map((r) => r.userId) } },
+    });
+    const existingByUserId = new Map(existing.map((r) => [r.userId, r]));
+    await Promise.all(
+      stillRegistered.map((r) => {
+        const record = existingByUserId.get(r.userId);
+        if (record) {
+          return db.serviceHourRecord.update({
+            where: { id: record.id },
+            data: { hours: event.defaultServiceHours, status: "VERIFIED", approvedById: user.id, approvedAt: new Date() },
+          });
+        }
+        return db.serviceHourRecord.create({
+          data: {
+            userId: r.userId,
+            clubId: event.clubId,
+            eventId,
+            hours: event.defaultServiceHours,
+            status: "VERIFIED",
+            approvedById: user.id,
+            approvedAt: new Date(),
+            taskDescription: event.serviceTaskDescription,
+          },
+        });
+      })
+    );
+    await Promise.all(stillRegistered.map((r) => checkAndUnlockAchievements(r.userId)));
+  }
+
+  revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
+  revalidatePath(`/director/${event.clubId}/attendance`);
+  revalidatePath("/service-hours");
+  return { markedCount: stillRegistered.length };
 }
 
 export async function updateAttendanceHoursAction(eventId: string, userId: string, hours: number) {

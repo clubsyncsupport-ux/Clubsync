@@ -9,6 +9,7 @@ import { BackButton } from "@/components/ui/back-button";
 export const metadata: Metadata = { title: "Attendance" };
 import { formatEventDate } from "@/lib/format";
 import { AttendanceRow } from "./attendance-row";
+import { AutoMarkAttendedOnView } from "./auto-mark-attended-on-view";
 
 export default async function EventAttendancePage({ params }: { params: Promise<{ clubId: string; eventId: string }> }) {
   const { clubId, eventId } = await params;
@@ -33,6 +34,7 @@ export default async function EventAttendancePage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 animate-fade-in">
+      <AutoMarkAttendedOnView eventId={eventId} />
       <BackButton fallbackHref={`/director/${clubId}/attendance`} />
 
       <div className="mt-3 flex items-center justify-between gap-3">

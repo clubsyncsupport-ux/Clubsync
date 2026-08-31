@@ -65,7 +65,11 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
               <Link href={`/director/${clubId}/events/${eventId}/edit`} className="text-sm font-medium text-accent">
                 ✏ Edit Event
               </Link>
-              <CancelEventButton eventId={event.id} />
+              <CancelEventButton
+                eventId={event.id}
+                clubId={clubId}
+                isRecurring={event.recurrence !== "NONE" || !!event.recurrenceParentId}
+              />
             </>
           )}
           <Link href={`/director/${clubId}/events/new?copyFrom=${eventId}`} className="text-sm font-medium text-accent">
