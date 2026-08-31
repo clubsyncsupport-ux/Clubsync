@@ -86,7 +86,9 @@ export type CalendarViewT = (typeof CALENDAR_VIEWS)[number];
 // Deliberately red-free: red is reserved app-wide to mean "this event is
 // full" on the student calendar (see calendar/page.tsx), so it's never a
 // pickable club or personal-category color — a red event pill always means
-// the same thing everywhere.
+// the same thing everywhere. Also deliberately white-free: white is
+// reserved app-wide for the "My Google Calendar" layer on every calendar
+// view (see GOOGLE_CALENDAR_COLOR in all-clubs-calendar-view.tsx).
 export const CLUB_COLOR_PALETTE = [
   { name: "Teal", value: "#0d9488" },
   { name: "Blue", value: "#2563eb" },

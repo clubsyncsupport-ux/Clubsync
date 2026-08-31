@@ -38,16 +38,25 @@ export default async function TeacherCalendarPage({
   const myClubIds = new Set(myMemberships.map((m) => m.clubId));
   const schoolIds = Array.from(new Set(myMemberships.map((m) => m.club.schoolId)));
 
-  const events = await db.event.findMany({
-    where: {
-      status: { not: "CANCELLED" },
-      startAt: { gte: rangeStart, lte: rangeEnd },
-      club: { schoolId: { in: schoolIds }, status: "ACTIVE" },
-      visibility: "PUBLIC",
-    },
-    include: { club: true },
-    orderBy: { startAt: "asc" },
-  });
+  const [events, allSchoolClubs] = await Promise.all([
+    db.event.findMany({
+      where: {
+        status: { not: "CANCELLED" },
+        startAt: { gte: rangeStart, lte: rangeEnd },
+        club: { schoolId: { in: schoolIds }, status: "ACTIVE" },
+        visibility: "PUBLIC",
+      },
+      include: { club: true },
+      orderBy: { startAt: "asc" },
+    }),
+    // Every active club across the teacher's school(s), not just ones with
+    // an event in this window — lets them pre-hide a club before it posts anything.
+    db.club.findMany({
+      where: { schoolId: { in: schoolIds }, status: "ACTIVE" },
+      select: { id: true, name: true, color: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   const googleEvents = user.googleCalendarRefreshToken
     ? await getGoogleCalendarEvents(user.id, user.googleCalendarRefreshToken, rangeStart, rangeEnd)
     : [];
@@ -63,9 +72,7 @@ export default async function TeacherCalendarPage({
     ...googleEvents.map((e) => ({ kind: "google" as const, event: e })),
   ].sort((a, b) => a.event.startAt.getTime() - b.event.startAt.getTime());
 
-  const legendClubs: { id: string; name: string; color: string }[] = Array.from(
-    new Map(events.map((e) => [e.club.id, e.club])).values()
-  ).map((c) => ({ id: c.id, name: c.name, color: c.color }));
+  const legendClubs: { id: string; name: string; color: string }[] = [...allSchoolClubs];
   if (user.googleCalendarRefreshToken) legendClubs.push(googleLegendEntry());
 
   const prevHref = `/teacher/calendar?view=${view}&date=${format(subMonths(refDate, 1), "yyyy-MM-dd")}`;

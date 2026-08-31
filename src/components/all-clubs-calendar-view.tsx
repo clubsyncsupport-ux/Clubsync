@@ -4,7 +4,8 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 
-export const GOOGLE_CALENDAR_COLOR = "#4285f4";
+// White — reserved app-wide (never a pickable club color, see CLUB_COLOR_PALETTE).
+export const GOOGLE_CALENDAR_COLOR = "#ffffff";
 // A synthetic id (never a real club's cuid) so the Google layer can reuse
 // ClubFilterLegend's existing data-club-id show/hide mechanism unchanged.
 export const GOOGLE_CALENDAR_LEGEND_ID = "__google__";
@@ -87,8 +88,8 @@ export function AllClubsMonthGrid({
                       key={it.event.id}
                       data-club-id={GOOGLE_CALENDAR_LEGEND_ID}
                       title={`My Google Calendar · ${format(it.event.startAt, "h:mm a")} — ${it.event.title}`}
-                      className="truncate rounded border border-dashed border-white/60 px-1 py-0.5 text-[10px] font-medium text-white sm:text-[11px]"
-                      style={{ backgroundColor: GOOGLE_CALENDAR_COLOR }}
+                      className="truncate rounded border border-dashed border-black/15 px-1 py-0.5 text-[10px] font-medium sm:text-[11px]"
+                      style={{ backgroundColor: GOOGLE_CALENDAR_COLOR, color: "#111827" }}
                     >
                       {format(it.event.startAt, "h:mm a")} {it.event.title}
                     </div>

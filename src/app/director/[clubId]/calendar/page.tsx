@@ -34,7 +34,7 @@ export default async function AllClubsCalendarPage({
   const rangeStart = view === "month" ? startOfWeek(startOfMonth(refDate)) : refDate;
   const rangeEnd = view === "month" ? endOfWeek(endOfMonth(refDate)) : addDays(refDate, 45);
 
-  const [events, me] = await Promise.all([
+  const [events, allSchoolClubs, me] = await Promise.all([
     db.event.findMany({
       where: {
         status: { not: "CANCELLED" },
@@ -45,6 +45,9 @@ export default async function AllClubsCalendarPage({
       include: { club: true },
       orderBy: { startAt: "asc" },
     }),
+    // Every active club at the school, not just ones with an event in this
+    // window — so the legend lets you pre-hide a club before it ever posts anything.
+    db.club.findMany({ where: { schoolId: club.schoolId, status: "ACTIVE" }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" } }),
     db.user.findUniqueOrThrow({ where: { id: user.id }, select: { googleCalendarRefreshToken: true } }),
   ]);
   const googleEvents = me.googleCalendarRefreshToken
@@ -63,9 +66,7 @@ export default async function AllClubsCalendarPage({
     ...googleEvents.map((e) => ({ kind: "google" as const, event: e })),
   ].sort((a, b) => a.event.startAt.getTime() - b.event.startAt.getTime());
 
-  const legendClubs: { id: string; name: string; color: string }[] = Array.from(
-    new Map(events.map((e) => [e.club.id, e.club])).values()
-  ).map((c) => ({ id: c.id, name: c.name, color: c.color }));
+  const legendClubs: { id: string; name: string; color: string }[] = [...allSchoolClubs];
   if (me.googleCalendarRefreshToken) legendClubs.push(googleLegendEntry());
 
   const prevHref = `/director/${clubId}/calendar?view=${view}&date=${format(subMonths(refDate, 1), "yyyy-MM-dd")}`;

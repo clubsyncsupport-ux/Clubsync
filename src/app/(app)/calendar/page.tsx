@@ -29,13 +29,13 @@ import { Card } from "@/components/ui/card";
 import { ColorDot } from "@/components/ui/badge";
 import { ClubFilterLegend } from "@/components/club-filter-legend";
 import { ConnectGoogleCalendarPrompt } from "@/components/connect-google-calendar-prompt";
+import { GOOGLE_CALENDAR_COLOR, GOOGLE_CALENDAR_LEGEND_ID, googleLegendEntry } from "@/components/all-clubs-calendar-view";
 import { AddPersonalEvent } from "./add-personal-event";
 import { PersonalEventRow } from "./personal-event-row";
 import { ColorIndex } from "./color-index";
 
 type ViewType = "month" | "week" | "day" | "agenda";
 const PERSONAL_COLOR = "#6b7280";
-const GOOGLE_COLOR = "#4285f4";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -95,11 +95,12 @@ export default async function CalendarPage({
       color: e.category?.color ?? PERSONAL_COLOR,
       personal: e,
     })),
-    ...googleEvents.map((e) => ({ id: e.id, kind: "google" as const, title: e.title, startAt: e.startAt, color: GOOGLE_COLOR })),
+    ...googleEvents.map((e) => ({ id: e.id, kind: "google" as const, title: e.title, startAt: e.startAt, color: GOOGLE_CALENDAR_COLOR })),
   ].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 
   const { prevHref, nextHref, title } = getNav(view, refDate);
-  const clubs = viewer.memberships.map((m) => m.club);
+  const clubs: { id: string; name: string; color: string }[] = viewer.memberships.map((m) => m.club);
+  if (viewer.googleCalendarRefreshToken) clubs.push(googleLegendEntry());
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">
@@ -215,11 +216,14 @@ function CalendarItemRow({ item }: { item: CalendarItem }) {
   if (item.kind === "club") return <EventCard event={item.event} full={item.isFull} />;
   if (item.kind === "personal") return <PersonalEventRow event={item.personal} />;
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-border-strong bg-surface-1 p-4">
-      <div className="h-11 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+    <div
+      data-club-id={GOOGLE_CALENDAR_LEGEND_ID}
+      className="flex items-center gap-3 rounded-2xl border border-dashed border-border-strong bg-surface-1 p-4"
+    >
+      <div className="h-11 w-1.5 shrink-0 rounded-full border border-black/15" style={{ backgroundColor: item.color }} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-xs font-medium text-text-secondary">
-          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-black/15" style={{ backgroundColor: item.color }} />
           <span className="truncate">Google Calendar</span>
         </div>
         <p className="mt-0.5 truncate font-semibold text-text-primary">{item.title}</p>
@@ -272,12 +276,13 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
                 {dayItems.slice(0, 3).map((it) => (
                   <div
                     key={it.id}
-                    data-club-id={it.kind === "club" ? it.event.club.id : undefined}
+                    data-club-id={it.kind === "club" ? it.event.club.id : it.kind === "google" ? GOOGLE_CALENDAR_LEGEND_ID : undefined}
                     className={cn(
-                      "truncate rounded px-1 py-0.5 text-[10px] font-medium text-white sm:text-[11px]",
-                      (it.kind === "personal" || it.kind === "google") && "border border-dashed border-white/60"
+                      "truncate rounded px-1 py-0.5 text-[10px] font-medium sm:text-[11px]",
+                      it.kind === "google" ? "border border-dashed border-black/15" : "text-white",
+                      it.kind === "personal" && "border border-dashed border-white/60"
                     )}
-                    style={{ backgroundColor: it.color }}
+                    style={{ backgroundColor: it.color, color: it.kind === "google" ? "#111827" : undefined }}
                   >
                     {it.title}
                   </div>
@@ -317,6 +322,16 @@ function WeekColumns({ refDate, items }: { refDate: Date; items: CalendarItem[] 
                   >
                     {format(it.startAt, "h:mm a")} {it.title}
                   </Link>
+                ) : it.kind === "google" ? (
+                  <div
+                    key={it.id}
+                    data-club-id={GOOGLE_CALENDAR_LEGEND_ID}
+                    className="truncate rounded-lg border border-dashed border-black/15 px-2 py-1 text-[11px] font-medium"
+                    style={{ backgroundColor: it.color, color: "#111827" }}
+                    title={it.title}
+                  >
+                    {format(it.startAt, "h:mm a")} {it.title}
+                  </div>
                 ) : (
                   <div
                     key={it.id}

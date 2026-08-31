@@ -40,7 +40,7 @@ export default async function TeacherDashboardPage() {
           />
         </Card>
       ) : (
-        <div className="mt-6 space-y-2">
+        <div className="mt-6 space-y-4">
           {memberships.map((m) => (
             <Link key={m.id} href={`/director/${m.club.id}`}>
               <Card>
