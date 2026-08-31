@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireUser } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { requireUser, getSessionToken, clearSessionCookie } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { authProvider } from "@/lib/auth";
 import { saveUploadedFile } from "@/lib/storage";
@@ -96,4 +97,36 @@ export async function changePasswordAction(_prev: SettingsState, formData: FormD
   const result = await authProvider.changePassword(user.id, currentPassword, newPassword);
   if (!result.ok) return { error: result.error };
   return { error: null, success: true };
+}
+
+export async function deleteMyAccountAction(_prev: SettingsState, formData: FormData): Promise<SettingsState> {
+  const user = await requireUser();
+  const password = String(formData.get("password") ?? "");
+
+  const me = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+  const verified = await authProvider.signIn({ email: me.email, password });
+  if (!verified.ok) return { error: "Incorrect password." };
+
+  // Club.createdById has no cascade — deleting a user who still owns a club
+  // would fail with a database constraint error. Catch it up front with a
+  // clear, actionable message instead of a raw crash.
+  const ownedClubs = await db.club.findMany({ where: { createdById: user.id }, select: { name: true } });
+  if (ownedClubs.length > 0) {
+    return {
+      error: `You still run ${ownedClubs.map((c) => c.name).join(", ")}. Delete or transfer ownership of ${
+        ownedClubs.length === 1 ? "it" : "them"
+      } first, from that club's Settings page.`,
+    };
+  }
+
+  try {
+    await db.user.delete({ where: { id: user.id } });
+  } catch {
+    return { error: "Something prevented deleting your account. Please contact support." };
+  }
+
+  const token = await getSessionToken();
+  if (token) await authProvider.signOut(token).catch(() => {});
+  await clearSessionCookie();
+  redirect("/welcome");
 }

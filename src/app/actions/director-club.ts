@@ -1,11 +1,46 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getDirectorContext } from "@/lib/director";
 import { saveUploadedFile } from "@/lib/storage";
 
 export type ActionState = { error: string | null; success?: boolean };
+
+// Self-service version of the admin-only archiveClubAction — a director
+// doesn't need to ask an admin just to pause their own club. Archiving is
+// soft/reversible: the club and its whole history (events, service hours,
+// announcements) stay intact and can be restored, unlike Delete below.
+export async function archiveOwnClubAction(clubId: string) {
+  const { isDirector } = await getDirectorContext(clubId);
+  if (!isDirector) return { error: "Only the Director can archive this club." };
+  await db.club.update({ where: { id: clubId }, data: { status: "ARCHIVED" } });
+  revalidatePath(`/director/${clubId}/settings`);
+  return { error: null };
+}
+
+export async function restoreOwnClubAction(clubId: string) {
+  const { isDirector } = await getDirectorContext(clubId);
+  if (!isDirector) return { error: "Only the Director can restore this club." };
+  await db.club.update({ where: { id: clubId }, data: { status: "ACTIVE" } });
+  revalidatePath(`/director/${clubId}/settings`);
+  return { error: null };
+}
+
+// Permanently deletes the club and everything under it (memberships, events,
+// registrations, service-hour records, announcements — every one of those
+// relations cascades from Club at the schema level). Requires typing the
+// exact club name as a deliberate, hard-to-misclick confirmation, since
+// there's no undo — unlike Archive, which a director should reach for first.
+export async function deleteOwnClubAction(clubId: string, confirmName: string) {
+  const { club, user, isDirector } = await getDirectorContext(clubId);
+  if (!isDirector) return { error: "Only the Director can delete this club." };
+  if (confirmName !== club.name) return { error: "That doesn't match the club's name — type it exactly to confirm." };
+  await db.club.delete({ where: { id: clubId } });
+  const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { accountKind: true } });
+  redirect(me.accountKind === "STAFF" ? "/teacher" : "/home");
+}
 
 export async function approveMembershipAction(membershipId: string, clubId: string) {
   await getDirectorContext(clubId);

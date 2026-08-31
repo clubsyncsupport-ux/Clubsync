@@ -7,6 +7,7 @@ import { CalendarPrefsForm } from "./calendar-prefs-form";
 import { GoogleCalendarCard } from "./google-calendar-card";
 import { ServiceHourGoalForm } from "./service-hour-goal-form";
 import { ChangePasswordForm } from "./change-password-form";
+import { DeleteAccountForm } from "./delete-account-form";
 import { InstallAppCard } from "./install-app-card";
 import { BackButton } from "@/components/ui/back-button";
 import type { ThemePref } from "@/lib/constants";
@@ -41,6 +42,7 @@ export default async function SettingsPage() {
       <ServiceHourGoalForm current={viewer.serviceHourGoal} />
       <ChangePasswordForm />
       <InstallAppCard />
+      <DeleteAccountForm />
 
       <form action={logoutAction}>
         <button type="submit" className="w-full rounded-xl border border-danger/30 bg-danger-soft py-3 text-center font-medium text-danger">
