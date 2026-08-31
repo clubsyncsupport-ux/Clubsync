@@ -23,10 +23,32 @@ export default async function TeacherDashboardPage() {
     <div className="mx-auto max-w-2xl px-4 py-6 animate-fade-in">
       <h1 className="text-2xl font-bold tracking-tight text-text-primary">Good day, {user.firstName} 👋</h1>
       <p className="mt-1 text-[15px] text-text-secondary">
-        {memberships.length === 0 ? "Get started by creating your first club." : "Here are the clubs you run."}
+        {user.staffApprovalStatus === "PENDING"
+          ? "Your account is under review."
+          : user.staffApprovalStatus === "REJECTED"
+            ? "Your account wasn't approved."
+            : memberships.length === 0
+              ? "Get started by creating your first club."
+              : "Here are the clubs you run."}
       </p>
 
-      {memberships.length === 0 ? (
+      {user.staffApprovalStatus === "PENDING" ? (
+        <Card className="mt-6">
+          <EmptyState
+            icon="⏳"
+            title="Pending approval"
+            description="Your teacher account is waiting on a Platform Admin to approve it — you'll be able to create a club as soon as it's approved."
+          />
+        </Card>
+      ) : user.staffApprovalStatus === "REJECTED" ? (
+        <Card className="mt-6">
+          <EmptyState
+            icon="🚫"
+            title="Account not approved"
+            description="Your teacher account wasn't approved. If you think this is a mistake, contact your school's ClubSync admin."
+          />
+        </Card>
+      ) : memberships.length === 0 ? (
         <Card className="mt-6">
           <EmptyState
             icon="🏫"

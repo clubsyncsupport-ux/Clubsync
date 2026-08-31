@@ -104,6 +104,26 @@ export async function setPlatformRoleAction(userId: string, role: "STUDENT" | "P
   revalidatePath("/admin/settings");
 }
 
+// ---- Teacher approval ----
+// A STAFF account can't create a club (see createClubAction) until a
+// Platform Admin approves it here — without this gate, a student could
+// pick "Teacher" at signup to skip the supervisor-vouching a
+// student-created club otherwise requires.
+
+export async function approveStaffAction(userId: string) {
+  const admin = await requireAdmin();
+  await db.user.update({ where: { id: userId, accountKind: "STAFF" }, data: { staffApprovalStatus: "APPROVED" } });
+  await logAudit(admin.id, "APPROVE_STAFF", "User", userId);
+  revalidatePath("/admin/settings");
+}
+
+export async function rejectStaffAction(userId: string) {
+  const admin = await requireAdmin();
+  await db.user.update({ where: { id: userId, accountKind: "STAFF" }, data: { staffApprovalStatus: "REJECTED" } });
+  await logAudit(admin.id, "REJECT_STAFF", "User", userId);
+  revalidatePath("/admin/settings");
+}
+
 // ---- Schools ----
 
 export type SchoolFormState = { error: string | null; success?: boolean };

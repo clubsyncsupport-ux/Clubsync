@@ -68,6 +68,13 @@ model User {
   // A student who later creates a club via "+ Create Club" stays accountKind STUDENT
   // and simply gains an extra director profile alongside their student one.
   accountKind       String   @default("STUDENT")
+  // staffApprovalStatus: "PENDING" | "APPROVED" | "REJECTED" — only ever
+  // set for accountKind STAFF. Set to PENDING the moment someone completes
+  // Teacher onboarding; until a Platform Admin approves it, createClubAction
+  // refuses to let them create a club. Without this, a student could pick
+  // "Teacher" at signup to skip the supervisor-vouching a student-created
+  // club otherwise requires and create a club with no oversight at all.
+  staffApprovalStatus String?
 
   grade             String?
   schoolId          String?

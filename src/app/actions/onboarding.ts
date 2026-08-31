@@ -75,7 +75,7 @@ export async function completeDirectorOnboardingAction(_prev: OnboardingState, f
   const schoolId = await resolveSchoolId(schoolName);
   await db.user.update({
     where: { id: user.id },
-    data: { schoolId, accountKind: "STAFF" },
+    data: { schoolId, accountKind: "STAFF", staffApprovalStatus: "PENDING" },
   });
 
   redirect("/teacher");

@@ -14,6 +14,9 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
   const authUser = await requireUser();
   const user = await db.user.findUniqueOrThrow({ where: { id: authUser.id } });
   if (!user.schoolId) return { error: "Finish onboarding before creating a club." };
+  if (user.accountKind === "STAFF" && user.staffApprovalStatus !== "APPROVED") {
+    return { error: "Your teacher account is still pending admin approval — you'll be able to create a club once it's approved." };
+  }
 
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();

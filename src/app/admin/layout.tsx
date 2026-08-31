@@ -1,22 +1,24 @@
 import { requireAdmin } from "@/lib/admin";
 import { logoutAction } from "@/app/actions/auth";
 import { switchProfileAction } from "@/app/actions/profile";
+import { db } from "@/lib/db";
 import { AdminNavLinks, AdminMobileNavLinks } from "./admin-nav-links";
 import type { NavIconName } from "@/components/nav/nav-icons";
 
-const NAV: { href: string; label: string; icon: NavIconName }[] = [
-  { href: "/admin", label: "Dashboard", icon: "LayoutDashboard" },
-  { href: "/admin/schools", label: "Schools", icon: "School" },
-  { href: "/admin/users", label: "Users", icon: "User" },
-  { href: "/admin/clubs", label: "Clubs", icon: "Users" },
-  { href: "/admin/events", label: "Events", icon: "Calendar" },
-  { href: "/admin/service-hours", label: "Service Hours", icon: "Clock" },
-  { href: "/admin/moderation", label: "Moderation & Logs", icon: "Shield" },
-  { href: "/admin/settings", label: "Settings", icon: "Settings" },
-];
-
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
+  const pendingStaffCount = await db.user.count({ where: { accountKind: "STAFF", staffApprovalStatus: "PENDING" } });
+
+  const NAV: { href: string; label: string; icon: NavIconName; badge?: boolean }[] = [
+    { href: "/admin", label: "Dashboard", icon: "LayoutDashboard" },
+    { href: "/admin/schools", label: "Schools", icon: "School" },
+    { href: "/admin/users", label: "Users", icon: "User" },
+    { href: "/admin/clubs", label: "Clubs", icon: "Users" },
+    { href: "/admin/events", label: "Events", icon: "Calendar" },
+    { href: "/admin/service-hours", label: "Service Hours", icon: "Clock" },
+    { href: "/admin/moderation", label: "Moderation & Logs", icon: "Shield" },
+    { href: "/admin/settings", label: "Settings", icon: "Settings", badge: pendingStaffCount > 0 },
+  ];
 
   return (
     <div className="flex min-h-dvh bg-surface-0">
