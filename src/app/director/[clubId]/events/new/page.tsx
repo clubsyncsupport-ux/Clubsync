@@ -18,7 +18,7 @@ export default async function NewEventPage({
   const { club } = await getDirectorContext(clubId);
   const { copyFrom } = await searchParams;
 
-  const [members, sourceEvent, school] = await Promise.all([
+  const [members, sourceEvent, school, groups] = await Promise.all([
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
       include: { user: true },
@@ -26,6 +26,7 @@ export default async function NewEventPage({
     }),
     copyFrom ? db.event.findUnique({ where: { id: copyFrom } }) : null,
     db.school.findUniqueOrThrow({ where: { id: club.schoolId } }),
+    db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
   ]);
   const gradeLevels = schoolGradeLevels(school);
 
@@ -61,6 +62,7 @@ export default async function NewEventPage({
       <CreateEventForm
         clubId={clubId}
         members={members.map((m) => ({ id: m.user.id, name: `${m.user.firstName} ${m.user.lastName}` }))}
+        groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
         gradeLevels={gradeLevels}
         prefill={prefill}
       />

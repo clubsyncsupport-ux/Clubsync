@@ -28,11 +28,15 @@ export type EventPrefill = {
 export function CreateEventForm({
   clubId,
   members,
+  groups = [],
   gradeLevels,
   prefill,
 }: {
   clubId: string;
   members: { id: string; name: string }[];
+  /** Director-defined tags (e.g. "Executive Team") for bulk-selecting a
+   * known set of members instead of checking each name individually. */
+  groups?: { id: string; name: string; color: string; memberIds: string[] }[];
   /** This club's school's configured grade levels — what the "allowed
    * grades" picker offers, in place of the global default list. */
   gradeLevels: string[];
@@ -47,7 +51,7 @@ export function CreateEventForm({
   const [awardsServiceHours, setAwardsServiceHours] = useState(prefill?.awardsServiceHours ?? false);
   const [recurrence, setRecurrence] = useState<"NONE" | "DAILY" | "WEEKLY" | "MONTHLY">("NONE");
   const [allowedGrades, setAllowedGrades] = useState<string[]>(prefill?.allowedGrades ?? [...gradeLevels]);
-  const [roles, setRoles] = useState<{ name: string; capacity: string }[]>([]);
+  const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[] }[]>([]);
   const [roleInput, setRoleInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -58,6 +62,17 @@ export function CreateEventForm({
 
   function toggleAssigned(id: string) {
     setAssigned((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  }
+
+  // Clicking a group selects every member of it that isn't already
+  // selected; clicking again (once everyone in it is selected) clears just
+  // that group's members back out — either way, individual names can still
+  // be checked/unchecked afterward.
+  function toggleAssignedGroup(memberIds: string[]) {
+    setAssigned((prev) => {
+      const allSelected = memberIds.every((id) => prev.includes(id));
+      return allSelected ? prev.filter((id) => !memberIds.includes(id)) : Array.from(new Set([...prev, ...memberIds]));
+    });
   }
 
   function toggleGrade(g: string) {
@@ -71,7 +86,7 @@ export function CreateEventForm({
       setRoleInput("");
       return;
     }
-    setRoles((prev) => [...prev, { name, capacity: "1" }]);
+    setRoles((prev) => [...prev, { name, capacity: "1", allowedGrades: [...gradeLevels] }]);
     setRoleInput("");
   }
 
@@ -83,6 +98,14 @@ export function CreateEventForm({
     setRoles((prev) => prev.map((r) => (r.name === name ? { ...r, capacity } : r)));
   }
 
+  function toggleRoleGrade(name: string, grade: string) {
+    setRoles((prev) =>
+      prev.map((r) =>
+        r.name === name ? { ...r, allowedGrades: r.allowedGrades.includes(grade) ? r.allowedGrades.filter((g) => g !== grade) : [...r.allowedGrades, grade] } : r
+      )
+    );
+  }
+
   function handleSubmit(formData: FormData) {
     setError(null);
     if (allowedGrades.length === 0) {
@@ -92,9 +115,17 @@ export function CreateEventForm({
     formData.set("visibility", visibility);
     if (visibility === "PRIVATE") invited.forEach((id) => formData.append("inviteUserIds", id));
     assigned.forEach((id) => formData.append("assignedUserIds", id));
+    for (const r of roles) {
+      if (r.allowedGrades.length === 0) {
+        setError(`Select at least one grade for the "${r.name}" role — or select all of them for no restriction.`);
+        return;
+      }
+    }
     roles.forEach((r) => {
       formData.append("roleName", r.name);
       formData.append("roleCapacity", String(Math.max(1, Number(r.capacity) || 1)));
+      // Empty string means "every grade" — same convention as the event-level restriction.
+      formData.append("roleAllowedGrades", r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : "");
     });
     // Only send a restriction if it's not "every grade" — that's the same as no restriction.
     if (allowedGrades.length > 0 && allowedGrades.length < gradeLevels.length) {
@@ -251,23 +282,40 @@ export function CreateEventForm({
           {roles.length > 0 && (
             <div className="space-y-2">
               {roles.map((r) => (
-                <div key={r.name} className="flex items-center gap-3 rounded-xl border border-border p-3">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{r.name}</span>
-                  <Label htmlFor={`role-capacity-${r.name}`} className="mb-0 shrink-0 text-xs text-text-muted">
-                    Needed
-                  </Label>
-                  <div className="w-16 shrink-0">
-                    <Input
-                      id={`role-capacity-${r.name}`}
-                      type="number"
-                      min={1}
-                      value={r.capacity}
-                      onChange={(e) => setRoleCapacity(r.name, e.target.value)}
-                    />
+                <div key={r.name} className="space-y-2 rounded-xl border border-border p-3">
+                  <div className="flex items-center gap-3">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">{r.name}</span>
+                    <Label htmlFor={`role-capacity-${r.name}`} className="mb-0 shrink-0 text-xs text-text-muted">
+                      Needed
+                    </Label>
+                    <div className="w-16 shrink-0">
+                      <Input
+                        id={`role-capacity-${r.name}`}
+                        type="number"
+                        min={1}
+                        value={r.capacity}
+                        onChange={(e) => setRoleCapacity(r.name, e.target.value)}
+                      />
+                    </div>
+                    <button type="button" onClick={() => removeRole(r.name)} className="shrink-0 text-xs font-medium text-danger">
+                      Remove
+                    </button>
                   </div>
-                  <button type="button" onClick={() => removeRole(r.name)} className="shrink-0 text-xs font-medium text-danger">
-                    Remove
-                  </button>
+                  <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
+                    <span className="mr-1 text-xs text-text-muted">Grades:</span>
+                    {gradeLevels.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => toggleRoleGrade(r.name, g)}
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                          r.allowedGrades.includes(g) ? "border-accent bg-accent-soft text-accent-soft-text" : "border-border text-text-secondary"
+                        }`}
+                      >
+                        {g.replace("Grade ", "")}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -324,6 +372,27 @@ export function CreateEventForm({
             Assigned students are put on the roster automatically — no Join button needed. Leave everyone unchecked for a normal
             event where members join themselves.
           </p>
+          {groups.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {groups.map((g) => {
+                const allSelected = g.memberIds.length > 0 && g.memberIds.every((id) => assigned.includes(id));
+                return (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => toggleAssignedGroup(g.memberIds)}
+                    title={allSelected ? `Remove everyone in ${g.name}` : `Select everyone in ${g.name}`}
+                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      allSelected ? "border-accent bg-accent-soft text-accent-soft-text" : "border-border text-text-secondary hover:bg-surface-2"
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: g.color }} />
+                    {g.name} ({g.memberIds.length})
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border p-2">
             {members.length === 0 && <p className="p-2 text-sm text-text-muted">No members yet.</p>}
             {members.map((m) => (

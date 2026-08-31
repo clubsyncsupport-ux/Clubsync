@@ -11,11 +11,13 @@ export function MemberRow({
   clubId,
   isDirector,
   pending = false,
+  groups = [],
 }: {
   membership: ClubMembership & { user: User };
   clubId: string;
   isDirector: boolean;
   pending?: boolean;
+  groups?: { name: string; color: string }[];
 }) {
   const [isPending, startTransition] = useTransition();
   const { user } = membership;
@@ -24,9 +26,14 @@ export function MemberRow({
     <div className="flex items-center gap-3 px-4 py-3">
       <Avatar firstName={user.firstName} lastName={user.lastName} src={user.avatarUrl} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-text-primary">
-          {user.firstName} {user.lastName}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-sm font-medium text-text-primary">
+            {user.firstName} {user.lastName}
+          </p>
+          {groups.map((g) => (
+            <span key={g.name} title={g.name} className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
+          ))}
+        </div>
         <p className="text-xs text-text-muted">
           {user.grade ?? "—"} · {user.email}
         </p>

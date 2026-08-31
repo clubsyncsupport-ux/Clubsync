@@ -6,7 +6,16 @@ import { Button } from "@/components/ui/button";
 import { REMINDER_OFFSETS } from "@/lib/constants";
 import { cn } from "@/lib/cn";
 
-type EventRoleOption = { id: string; name: string; capacity: number; filledCount: number };
+type EventRoleOption = {
+  id: string;
+  name: string;
+  capacity: number;
+  filledCount: number;
+  /** Whether the viewer's own grade meets this role's own grade restriction
+   * (independent of, and possibly narrower than, the event's own). */
+  eligible: boolean;
+  ineligibleReason?: string;
+};
 
 export function RegisterEventButton({
   eventId,
@@ -112,16 +121,25 @@ export function RegisterEventButton({
               <button
                 key={r.id}
                 type="button"
-                disabled={pending || (roleFull && !waitlistEnabled)}
+                disabled={pending || !r.eligible || (roleFull && !waitlistEnabled)}
                 onClick={() => join(r.id)}
+                title={!r.eligible ? r.ineligibleReason : undefined}
                 className={cn(
                   "flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                  roleFull ? "border-border bg-surface-2 text-text-muted" : "border-border-strong text-text-primary hover:border-accent hover:bg-accent-soft"
+                  !r.eligible || roleFull
+                    ? "border-border bg-surface-2 text-text-muted"
+                    : "border-border-strong text-text-primary hover:border-accent hover:bg-accent-soft"
                 )}
               >
                 <span>{r.name}</span>
                 <span className="text-xs font-normal text-text-muted">
-                  {roleFull ? (waitlistEnabled ? "Full — join waitlist" : "Full") : `${r.filledCount} / ${r.capacity} filled`}
+                  {!r.eligible
+                    ? r.ineligibleReason
+                    : roleFull
+                      ? waitlistEnabled
+                        ? "Full — join waitlist"
+                        : "Full"
+                      : `${r.filledCount} / ${r.capacity} filled`}
                 </span>
               </button>
             );

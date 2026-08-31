@@ -101,6 +101,7 @@ model User {
 
   sessions            Session[]
   memberships         ClubMembership[]
+  memberGroupMemberships MemberGroupMembership[]
   createdClubs        Club[]              @relation("ClubCreatedBy")
   pendingSupervisorFor Club[]             @relation("ClubPendingSupervisor")
   eventRegistrations  EventRegistration[]
@@ -201,6 +202,34 @@ model Club {
   events        Event[]
   announcements Announcement[]
   serviceHours  ServiceHourRecord[]
+  memberGroups  MemberGroup[]
+}
+
+// A director-defined tag like "Executive Team" — lets a director bulk-select
+// a known set of members when creating an event instead of checking each
+// name individually every time. A member can belong to any number of groups
+// at once (e.g. both "Executive Team" and "Fundraising Committee").
+model MemberGroup {
+  id        String   @id @default(cuid())
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name      String
+  color     String
+  createdAt DateTime @default(now())
+
+  members MemberGroupMembership[]
+
+  @@unique([clubId, name])
+}
+
+model MemberGroupMembership {
+  id      String      @id @default(cuid())
+  groupId String
+  group   MemberGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
 }
 
 model ClubMembership {
@@ -294,6 +323,11 @@ model EventRole {
   name     String
   capacity Int
   order    Int    @default(0)
+  // Comma-separated grade levels, e.g. "Grade 10,Grade 11,Grade 12" — null
+  // means this role has no restriction of its own beyond whatever the
+  // event's own allowedGrades already filters (e.g. "Scorekeeper" can be
+  // Grade 10+ even on an event otherwise open to every grade).
+  allowedGrades String?
 
   registrations EventRegistration[]
 }

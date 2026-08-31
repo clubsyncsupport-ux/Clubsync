@@ -49,8 +49,9 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
   // Parallel arrays (index-matched) — see the "Roles" section of the create form.
   const roleNames = formData.getAll("roleName").map(String);
   const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
+  const roleAllowedGradesRaw = formData.getAll("roleAllowedGrades").map(String);
   const roles = roleNames
-    .map((name, i) => ({ name: name.trim(), capacity: roleCapacities[i] }))
+    .map((name, i) => ({ name: name.trim(), capacity: roleCapacities[i], allowedGrades: roleAllowedGradesRaw[i]?.trim() || null }))
     .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
@@ -112,7 +113,9 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         invites: visibility === "PRIVATE" ? { create: allInviteIds.map((userId) => ({ userId })) } : undefined,
         attachments: savedAttachments.length ? { create: savedAttachments } : undefined,
         registrations: assignedUserIds.length ? { create: assignedUserIds.map((userId) => ({ userId, status: "REGISTERED" as const })) } : undefined,
-        roles: roles.length ? { create: roles.map((r, i) => ({ name: r.name, capacity: r.capacity, order: i })) } : undefined,
+        roles: roles.length
+          ? { create: roles.map((r, i) => ({ name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, order: i })) }
+          : undefined,
       },
     });
     if (!parentId) parentId = created.id;

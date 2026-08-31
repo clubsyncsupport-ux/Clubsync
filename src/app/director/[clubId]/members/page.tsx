@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MemberRow } from "./member-row";
+import { ManageGroups } from "./manage-groups";
 import { schoolGradeLevels } from "@/lib/grades";
 
 export const metadata: Metadata = { title: "Members" };
@@ -23,16 +24,33 @@ export default async function DirectorMembersPage({
   const school = await db.school.findUniqueOrThrow({ where: { id: club.schoolId } });
   const gradeLevels = schoolGradeLevels(school);
 
-  const memberships = await db.clubMembership.findMany({
-    where: {
-      clubId,
-      ...(q
-        ? { user: { OR: [{ firstName: { contains: q } }, { lastName: { contains: q } }, { email: { contains: q } }] } }
-        : {}),
-    },
-    include: { user: true },
-    orderBy: [{ status: "asc" }, { role: "asc" }, { joinedAt: "asc" }],
-  });
+  const [memberships, allMembersForGroups, groups] = await Promise.all([
+    db.clubMembership.findMany({
+      where: {
+        clubId,
+        ...(q
+          ? { user: { OR: [{ firstName: { contains: q } }, { lastName: { contains: q } }, { email: { contains: q } }] } }
+          : {}),
+      },
+      include: { user: true },
+      orderBy: [{ status: "asc" }, { role: "asc" }, { joinedAt: "asc" }],
+    }),
+    db.clubMembership.findMany({
+      where: { clubId, status: "ACTIVE" },
+      include: { user: true },
+      orderBy: { user: { firstName: "asc" } },
+    }),
+    db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  const groupsByUserId = new Map<string, { name: string; color: string }[]>();
+  for (const g of groups) {
+    for (const m of g.members) {
+      const list = groupsByUserId.get(m.userId) ?? [];
+      list.push({ name: g.name, color: g.color });
+      groupsByUserId.set(m.userId, list);
+    }
+  }
 
   const pending = memberships.filter((m) => m.status === "PENDING");
   const active = memberships.filter((m) => m.status === "ACTIVE");
@@ -85,7 +103,7 @@ export default async function DirectorMembersPage({
           <Card>
             <CardContent className="divide-y divide-border p-0">
               {admins.map((m) => (
-                <MemberRow key={m.id} membership={m} clubId={clubId} isDirector={isDirector} />
+                <MemberRow key={m.id} membership={m} clubId={clubId} isDirector={isDirector} groups={groupsByUserId.get(m.userId) ?? []} />
               ))}
             </CardContent>
           </Card>
@@ -113,7 +131,7 @@ export default async function DirectorMembersPage({
                   </summary>
                   <div className="divide-y divide-border border-t border-border">
                     {inGrade.map((m) => (
-                      <MemberRow key={m.id} membership={m} clubId={clubId} isDirector={isDirector} />
+                      <MemberRow key={m.id} membership={m} clubId={clubId} isDirector={isDirector} groups={groupsByUserId.get(m.userId) ?? []} />
                     ))}
                   </div>
                 </details>
@@ -122,6 +140,14 @@ export default async function DirectorMembersPage({
           </div>
         )}
       </div>
+
+      {isDirector && (
+        <ManageGroups
+          clubId={clubId}
+          groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
+          members={allMembersForGroups.map((m) => ({ id: m.userId, firstName: m.user.firstName, lastName: m.user.lastName }))}
+        />
+      )}
     </div>
   );
 }

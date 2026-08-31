@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { ColorDot, Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { RegisterEventButton } from "@/components/register-event-button";
+import { RecurringSeriesJoin } from "@/components/recurring-series-join";
 import { ShareButton } from "@/components/share-button";
 import { BackButton } from "@/components/ui/back-button";
 import { formatTimeRange } from "@/lib/format";
@@ -107,9 +108,13 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
             {event.roles.map((r) => {
               const filled = r._count.registrations;
               const roleFull = filled >= r.capacity;
+              const roleGrades = r.allowedGrades ? r.allowedGrades.split(",") : null;
               return (
                 <div key={r.id} className="flex items-center justify-between text-sm">
-                  <span className="text-text-primary">{r.name}</span>
+                  <span className="text-text-primary">
+                    {r.name}
+                    {roleGrades && <span className="ml-1.5 text-xs text-text-muted">({roleGrades.join(", ")} only)</span>}
+                  </span>
                   <span className={roleFull ? "font-medium text-success" : "text-text-secondary"}>
                     {filled} / {r.capacity} {roleFull ? "✓ Filled" : "filled"}
                   </span>
@@ -171,9 +176,23 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
               waitlistEnabled={event.waitlistEnabled}
               initialReminderOffsets={myRegistration?.reminderOffsets ? parseReminderOffsets(myRegistration.reminderOffsets) : []}
               accountDefaultOffsets={parseReminderOffsets(viewer.reminderOffsets)}
-              roles={event.roles.map((r) => ({ id: r.id, name: r.name, capacity: r.capacity, filledCount: r._count.registrations }))}
+              roles={event.roles.map((r) => {
+                const roleGrades = r.allowedGrades ? r.allowedGrades.split(",") : null;
+                const roleEligible = !roleGrades || (viewer.grade ? roleGrades.includes(viewer.grade) : false);
+                return {
+                  id: r.id,
+                  name: r.name,
+                  capacity: r.capacity,
+                  filledCount: r._count.registrations,
+                  eligible: roleEligible,
+                  ineligibleReason: roleEligible ? undefined : `${roleGrades!.join(", ")} only`,
+                };
+              })}
               initialRoleName={myRegistration?.role?.name}
             />
+          )}
+          {isMember && gradeEligible && (event.recurrence !== "NONE" || event.recurrenceParentId) && (
+            <RecurringSeriesJoin eventId={event.id} roleNames={event.roles.map((r) => r.name)} />
           )}
         </div>
         <ShareButton title={event.title} text={`${event.title} — ${event.club.name} on ClubSync`} />
