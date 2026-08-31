@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { BackButton } from "@/components/ui/back-button";
 
 export const metadata: Metadata = { title: "Attendance" };
 import { formatEventDate } from "@/lib/format";
@@ -33,9 +33,7 @@ export default async function EventAttendancePage({ params }: { params: Promise<
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 animate-fade-in">
-      <Link href={`/director/${clubId}/events/${eventId}`} className="text-sm font-medium text-text-secondary hover:text-text-primary">
-        ← Back to {event.title}
-      </Link>
+      <BackButton fallbackHref={`/director/${clubId}/attendance`} />
 
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>
