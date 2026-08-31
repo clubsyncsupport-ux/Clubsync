@@ -236,36 +236,50 @@ export async function finalizeEventAction(
 
   const entries = Object.entries(hoursByUser).filter(([, hours]) => hours > 0);
 
-  await db.$transaction(async (tx) => {
-    for (const [userId, hours] of entries) {
-      const existing = await tx.serviceHourRecord.findFirst({ where: { eventId, userId } });
-      if (existing) {
-        await tx.serviceHourRecord.update({
-          where: { id: existing.id },
-          data: { hours, status: "VERIFIED", approvedById: user.id, approvedAt: new Date(), eventImpact: eventImpact || null },
-        });
-      } else {
-        await tx.serviceHourRecord.create({
-          data: {
-            userId,
-            clubId: event.clubId,
-            eventId,
-            hours,
-            status: "VERIFIED",
-            approvedById: user.id,
-            approvedAt: new Date(),
-            taskDescription: event.serviceTaskDescription,
-            eventImpact: eventImpact || null,
-          },
-        });
-      }
-    }
-    await tx.eventRegistration.updateMany({
-      where: { eventId, userId: { in: entries.map(([id]) => id) } },
-      data: { status: "ATTENDED" },
-    });
-    await tx.event.update({ where: { id: eventId }, data: { status: "FINALIZED", eventImpact: eventImpact || null } });
+  // One findFirst+create/update round trip per attendee, sequentially
+  // awaited inside a single interactive transaction, used to blow past
+  // Prisma's default 5s transaction timeout once an event had ~20+
+  // attendees. Look up existing records in one query up front, then run
+  // the per-user writes concurrently instead of one at a time.
+  const existingRecords = await db.serviceHourRecord.findMany({
+    where: { eventId, userId: { in: entries.map(([id]) => id) } },
   });
+  const existingByUserId = new Map(existingRecords.map((r) => [r.userId, r]));
+
+  await db.$transaction(
+    async (tx) => {
+      await Promise.all(
+        entries.map(([userId, hours]) => {
+          const existing = existingByUserId.get(userId);
+          if (existing) {
+            return tx.serviceHourRecord.update({
+              where: { id: existing.id },
+              data: { hours, status: "VERIFIED", approvedById: user.id, approvedAt: new Date(), eventImpact: eventImpact || null },
+            });
+          }
+          return tx.serviceHourRecord.create({
+            data: {
+              userId,
+              clubId: event.clubId,
+              eventId,
+              hours,
+              status: "VERIFIED",
+              approvedById: user.id,
+              approvedAt: new Date(),
+              taskDescription: event.serviceTaskDescription,
+              eventImpact: eventImpact || null,
+            },
+          });
+        })
+      );
+      await tx.eventRegistration.updateMany({
+        where: { eventId, userId: { in: entries.map(([id]) => id) } },
+        data: { status: "ATTENDED" },
+      });
+      await tx.event.update({ where: { id: eventId }, data: { status: "FINALIZED", eventImpact: eventImpact || null } });
+    },
+    { timeout: 15000 }
+  );
 
   for (const [userId] of entries) {
     await checkAndUnlockAchievements(userId);
