@@ -376,6 +376,14 @@ export async function directorRemoveRegistrantAction(eventId: string, userId: st
   revalidatePath(`/events/${eventId}`);
 }
 
+export async function toggleChecklistVisibilityAction(eventId: string) {
+  const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
+  await getDirectorContext(event.clubId);
+  await db.event.update({ where: { id: eventId }, data: { checklistVisibleToStudents: !event.checklistVisibleToStudents } });
+  revalidatePath(`/director/${event.clubId}/events/${eventId}`);
+  revalidatePath(`/events/${eventId}`);
+}
+
 export async function addChecklistItemAction(eventId: string, task: string) {
   const event = await db.event.findUniqueOrThrow({ where: { id: eventId } });
   await getDirectorContext(event.clubId);

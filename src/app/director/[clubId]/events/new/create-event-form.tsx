@@ -230,7 +230,10 @@ export function CreateEventForm({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="maxParticipants">Max participants (optional)</Label>
-              <Input id="maxParticipants" name="maxParticipants" type="number" min={1} defaultValue={prefill?.maxParticipants ?? undefined} />
+              <Input id="maxParticipants" name="maxParticipants" type="number" min={1} defaultValue={prefill?.maxParticipants ?? undefined} disabled={roles.length > 0} />
+              {roles.length > 0 && (
+                <p className="mt-1 text-xs text-text-muted">Ignored once you add roles below — each role&rsquo;s own capacity governs instead.</p>
+              )}
             </div>
             <div>
               <Label htmlFor="registrationDeadline">Registration deadline (optional)</Label>

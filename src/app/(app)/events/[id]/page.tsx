@@ -35,6 +35,7 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
         orderBy: { order: "asc" },
         include: { _count: { select: { registrations: { where: { status: "REGISTERED" } } } } },
       },
+      checklistItems: { orderBy: { order: "asc" } },
     },
   });
 
@@ -121,6 +122,22 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+      )}
+
+      {event.checklistVisibleToStudents && event.checklistItems.length > 0 && (
+        <Card className="mt-5">
+          <CardContent className="space-y-2 p-5">
+            <p className="text-sm font-semibold text-text-primary">Planning Checklist</p>
+            {event.checklistItems.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 text-sm">
+                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${item.completed ? "border-accent bg-accent text-on-accent" : "border-border-strong"}`}>
+                  {item.completed && "✓"}
+                </span>
+                <span className={item.completed ? "text-text-muted line-through" : "text-text-primary"}>{item.task}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

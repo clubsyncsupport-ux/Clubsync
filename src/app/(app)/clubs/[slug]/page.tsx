@@ -41,6 +41,15 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
 
   if (!club || club.status !== "ACTIVE" || club.approvalStatus !== "APPROVED") notFound();
 
+  const myRegisteredEventIds = new Set(
+    (
+      await db.eventRegistration.findMany({
+        where: { userId: viewer.id, eventId: { in: club.events.map((e) => e.id) }, status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED"] } },
+        select: { eventId: true },
+      })
+    ).map((r) => r.eventId)
+  );
+
   const myMembership =
     viewer.memberships.find((m) => m.clubId === club.id) ??
     (await db.clubMembership.findUnique({ where: { userId_clubId: { userId: viewer.id, clubId: club.id } } }));
@@ -60,7 +69,7 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
       </div>
 
       <div className="mx-auto max-w-3xl px-4 pb-10">
-        <div className="-mt-10 flex items-end gap-4">
+        <div className="-mt-6 flex items-end gap-4 sm:-mt-10">
           <div
             className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-surface-0 text-2xl font-bold text-white shadow-md"
             style={{ backgroundColor: club.color }}
@@ -74,7 +83,7 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
           </div>
           <div className="flex-1 pb-1">
             <h1 className="text-xl font-bold text-text-primary sm:text-2xl">{club.name}</h1>
-            <div className="mt-0.5 flex items-center gap-1.5 text-sm text-text-secondary">
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm text-text-secondary">
               <ColorDot color={club.color} />
               {parseCategories(club.category).join(", ")} · {club._count.memberships} members
             </div>
@@ -129,7 +138,11 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
           ) : (
             <div className="space-y-2">
               {club.events.map((e) => (
-                <EventCard key={e.id} event={{ ...e, club: { id: club.id, name: club.name, color: club.color, slug: club.slug } }} />
+                <EventCard
+                  key={e.id}
+                  event={{ ...e, club: { id: club.id, name: club.name, color: club.color, slug: club.slug } }}
+                  registered={myRegisteredEventIds.has(e.id)}
+                />
               ))}
             </div>
           )}

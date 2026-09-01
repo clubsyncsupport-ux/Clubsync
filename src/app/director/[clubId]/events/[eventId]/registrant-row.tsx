@@ -12,7 +12,7 @@ export function RegistrantRow({
   lastName,
   avatarUrl,
   grade,
-  attended,
+  status,
   roleName,
 }: {
   eventId: string;
@@ -21,7 +21,7 @@ export function RegistrantRow({
   lastName: string;
   avatarUrl: string | null;
   grade: string | null;
-  attended: boolean;
+  status: "REGISTERED" | "WAITLISTED" | "ATTENDED" | "NO_SHOW";
   roleName?: string | null;
 }) {
   const [removed, setRemoved] = useState(false);
@@ -41,7 +41,9 @@ export function RegistrantRow({
           {roleName && ` · ${roleName}`}
         </p>
       </div>
-      {attended && <Badge tone="success">Attended</Badge>}
+      {status === "WAITLISTED" && <Badge tone="warning">Waitlisted</Badge>}
+      {status === "ATTENDED" && <Badge tone="success">Attended</Badge>}
+      {status === "NO_SHOW" && <Badge tone="neutral">No Show</Badge>}
       <button
         type="button"
         disabled={pending}

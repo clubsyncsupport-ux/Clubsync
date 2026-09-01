@@ -12,6 +12,7 @@ import { AttachmentsSection } from "./attachments-section";
 import { FinalizeSection } from "./finalize-section";
 import { CancelEventButton } from "./cancel-event-button";
 import { RegistrantRow } from "./registrant-row";
+import { RolesRoster } from "./roles-roster";
 import { BackButton } from "@/components/ui/back-button";
 
 export async function generateMetadata({ params }: { params: Promise<{ clubId: string; eventId: string }> }): Promise<Metadata> {
@@ -30,14 +31,11 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
       checklistItems: { orderBy: { order: "asc" } },
       attachments: true,
       registrations: {
-        where: { status: { in: ["REGISTERED", "ATTENDED", "NO_SHOW"] } },
+        where: { status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED", "NO_SHOW"] } },
         include: { user: true, role: true },
         orderBy: { registeredAt: "asc" },
       },
-      roles: {
-        orderBy: { order: "asc" },
-        include: { _count: { select: { registrations: { where: { status: "REGISTERED" } } } } },
-      },
+      roles: { orderBy: { order: "asc" } },
     },
   });
   if (!event || event.clubId !== clubId) notFound();
@@ -89,22 +87,23 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
       {event.roles.length > 0 && (
         <div>
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Roles</h2>
-          <Card>
-            <CardContent className="space-y-2 p-5">
-              {event.roles.map((r) => {
-                const filled = r._count.registrations;
-                const roleFull = filled >= r.capacity;
-                return (
-                  <div key={r.id} className="flex items-center justify-between text-sm">
-                    <span className="text-text-primary">{r.name}</span>
-                    <span className={roleFull ? "font-medium text-success" : "text-text-secondary"}>
-                      {filled} / {r.capacity} {roleFull ? "✓ Filled" : "filled"}
-                    </span>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+          <RolesRoster
+            roles={event.roles.map((r) => ({
+              id: r.id,
+              name: r.name,
+              capacity: r.capacity,
+              waitlistCapacity: r.waitlistCapacity,
+              people: event.registrations
+                .filter((reg) => reg.roleId === r.id)
+                .map((reg) => ({
+                  userId: reg.userId,
+                  firstName: reg.user.firstName,
+                  lastName: reg.user.lastName,
+                  grade: reg.user.grade,
+                  status: reg.status as "REGISTERED" | "WAITLISTED" | "ATTENDED" | "NO_SHOW",
+                })),
+            }))}
+          />
         </div>
       )}
 
@@ -124,7 +123,7 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
                   lastName={r.user.lastName}
                   avatarUrl={r.user.avatarUrl}
                   grade={r.user.grade}
-                  attended={r.status === "ATTENDED"}
+                  status={r.status as "REGISTERED" | "WAITLISTED" | "ATTENDED" | "NO_SHOW"}
                   roleName={r.role?.name ?? null}
                 />
               ))}
@@ -133,7 +132,7 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
         )}
       </div>
 
-      <ChecklistSection eventId={event.id} items={event.checklistItems} />
+      <ChecklistSection eventId={event.id} items={event.checklistItems} visibleToStudents={event.checklistVisibleToStudents} />
       <AttachmentsSection eventId={event.id} attachments={event.attachments} />
 
       {(event.status === "COMPLETED" || event.status === "FINALIZED") && (

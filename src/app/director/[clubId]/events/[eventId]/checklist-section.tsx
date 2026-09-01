@@ -1,11 +1,24 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { addChecklistItemAction, toggleChecklistItemAction, deleteChecklistItemAction } from "@/app/actions/director-events";
+import {
+  addChecklistItemAction,
+  toggleChecklistItemAction,
+  deleteChecklistItemAction,
+  toggleChecklistVisibilityAction,
+} from "@/app/actions/director-events";
 import { Card, CardContent } from "@/components/ui/card";
 import type { EventChecklistItem } from "@prisma/client";
 
-export function ChecklistSection({ eventId, items }: { eventId: string; items: EventChecklistItem[] }) {
+export function ChecklistSection({
+  eventId,
+  items,
+  visibleToStudents,
+}: {
+  eventId: string;
+  items: EventChecklistItem[];
+  visibleToStudents: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
   const [newTask, setNewTask] = useState("");
@@ -19,7 +32,20 @@ export function ChecklistSection({ eventId, items }: { eventId: string; items: E
 
   return (
     <div>
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-muted">Event Planning Checklist</h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted">Event Planning Checklist</h2>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => startTransition(() => toggleChecklistVisibilityAction(eventId))}
+          title={visibleToStudents ? "Students can currently see this checklist" : "Students can't currently see this checklist"}
+          className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+            visibleToStudents ? "border-accent bg-accent-soft text-accent-soft-text" : "border-border text-text-secondary hover:bg-surface-2"
+          }`}
+        >
+          {visibleToStudents ? "👁 Visible to Students" : "🔒 Visible to Students"}
+        </button>
+      </div>
       <Card>
         <CardContent className="p-4 space-y-2">
           {items.length === 0 && <p className="text-sm text-text-muted">No tasks yet — add one below.</p>}

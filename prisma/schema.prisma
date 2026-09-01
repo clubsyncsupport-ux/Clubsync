@@ -292,6 +292,10 @@ model Event {
   // Independent of awardsServiceHours — a meeting can track who showed up
   // without handing out hours, or award hours without a formal roster.
   attendanceEnabled     Boolean  @default(false)
+  // Off by default — the planning checklist is director-only until a
+  // director explicitly opts to let members see it too (e.g. so students
+  // can track what's left to prepare for their own event).
+  checklistVisibleToStudents Boolean @default(false)
 
   // status: "SCHEDULED" | "COMPLETED" | "FINALIZED" | "CANCELLED"
   status                String   @default("SCHEDULED")

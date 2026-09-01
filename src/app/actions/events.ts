@@ -67,20 +67,28 @@ async function attemptRegisterForEvent(userId: string, eventId: string, roleId?:
     }
   }
 
-  const activeCount = await db.eventRegistration.count({
-    where: { eventId, status: "REGISTERED" },
-  });
-
   let status: "REGISTERED" | "WAITLISTED" = "REGISTERED";
-  if (event.maxParticipants && activeCount >= event.maxParticipants) {
-    if (!event.waitlistEnabled) return { ok: false, error: "This event is full." };
-    status = "WAITLISTED";
-  }
 
-  if (role && status === "REGISTERED") {
+  // Once an event has roles, each role's own capacity is what actually
+  // governs whether a specific join succeeds — the event's overall
+  // maxParticipants (if still set from before roles were added, or just left
+  // at some smaller number) must never block someone from a role that still
+  // has room. Previously the event-level check ran first and, once it hit,
+  // short-circuited the role check entirely (it only ran `if status ===
+  // "REGISTERED"`) — so a full event with an open role wrongly waitlisted
+  // everyone instead of letting them into that open role.
+  if (role) {
     const roleFilledCount = await db.eventRegistration.count({ where: { eventId, roleId: role.id, status: "REGISTERED" } });
     if (roleFilledCount >= role.capacity) {
       if (!event.waitlistEnabled) return { ok: false, error: `The "${role.name}" role is full — try a different one.` };
+      status = "WAITLISTED";
+    }
+  } else {
+    const activeCount = await db.eventRegistration.count({
+      where: { eventId, status: "REGISTERED" },
+    });
+    if (event.maxParticipants && activeCount >= event.maxParticipants) {
+      if (!event.waitlistEnabled) return { ok: false, error: "This event is full." };
       status = "WAITLISTED";
     }
   }
