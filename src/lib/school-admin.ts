@@ -58,3 +58,27 @@ export async function requireSchoolAccessForUser(targetUserId: string) {
 
   redirect("/access-denied");
 }
+
+// Same shape as requireSchoolAccessForUser, but for approving/rejecting a
+// pending Teacher account rather than moderating a student — the target
+// check is accountKind STAFF (not platformRole STUDENT) since those are
+// independent fields. A School Admin can only ever reach a pending teacher
+// at their own school; a Platform Admin can reach any of them.
+export async function requireSchoolAccessForStaffApproval(targetUserId: string) {
+  const authUser = await requireUser();
+  const [me, targetUser] = await Promise.all([
+    db.user.findUniqueOrThrow({ where: { id: authUser.id } }),
+    db.user.findUniqueOrThrow({ where: { id: targetUserId } }),
+  ]);
+
+  if (me.platformRole === "PLATFORM_ADMIN") return { me, targetUser, isPlatformAdmin: true };
+
+  const isSchoolAdminForTarget =
+    me.platformRole === "SCHOOL_ADMIN" &&
+    me.schoolAdminOfId !== null &&
+    me.schoolAdminOfId === targetUser.schoolId &&
+    targetUser.accountKind === "STAFF";
+  if (isSchoolAdminForTarget) return { me, targetUser, isPlatformAdmin: false };
+
+  redirect("/access-denied");
+}

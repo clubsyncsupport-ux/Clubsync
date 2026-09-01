@@ -13,11 +13,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin", label: "Dashboard", icon: "LayoutDashboard" },
     { href: "/admin/schools", label: "Schools", icon: "School" },
     { href: "/admin/users", label: "Users", icon: "User" },
+    { href: "/admin/teachers", label: "Teachers", icon: "GraduationCap", badge: pendingStaffCount > 0 },
     { href: "/admin/clubs", label: "Clubs", icon: "Users" },
     { href: "/admin/events", label: "Events", icon: "Calendar" },
     { href: "/admin/service-hours", label: "Service Hours", icon: "Clock" },
     { href: "/admin/moderation", label: "Moderation & Logs", icon: "Shield" },
-    { href: "/admin/settings", label: "Settings", icon: "Settings", badge: pendingStaffCount > 0 },
+    { href: "/admin/settings", label: "Settings", icon: "Settings" },
   ];
 
   return (

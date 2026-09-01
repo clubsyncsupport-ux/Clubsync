@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { requireAdmin, logAudit } from "@/lib/admin";
-import { getSchoolAdminContextForClub, requireSchoolAccessForUser } from "@/lib/school-admin";
+import { getSchoolAdminContextForClub, requireSchoolAccessForUser, requireSchoolAccessForStaffApproval } from "@/lib/school-admin";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
 
 // ---- Users ----
@@ -111,17 +111,21 @@ export async function setPlatformRoleAction(userId: string, role: "STUDENT" | "P
 // student-created club otherwise requires.
 
 export async function approveStaffAction(userId: string) {
-  const admin = await requireAdmin();
+  const { me, targetUser } = await requireSchoolAccessForStaffApproval(userId);
   await db.user.update({ where: { id: userId, accountKind: "STAFF" }, data: { staffApprovalStatus: "APPROVED" } });
-  await logAudit(admin.id, "APPROVE_STAFF", "User", userId);
+  await logAudit(me.id, "APPROVE_STAFF", "User", userId);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/teachers");
+  if (targetUser.schoolId) revalidatePath(`/school-admin/${targetUser.schoolId}/teachers`);
 }
 
 export async function rejectStaffAction(userId: string) {
-  const admin = await requireAdmin();
+  const { me, targetUser } = await requireSchoolAccessForStaffApproval(userId);
   await db.user.update({ where: { id: userId, accountKind: "STAFF" }, data: { staffApprovalStatus: "REJECTED" } });
-  await logAudit(admin.id, "REJECT_STAFF", "User", userId);
+  await logAudit(me.id, "REJECT_STAFF", "User", userId);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/teachers");
+  if (targetUser.schoolId) revalidatePath(`/school-admin/${targetUser.schoolId}/teachers`);
 }
 
 // ---- Schools ----

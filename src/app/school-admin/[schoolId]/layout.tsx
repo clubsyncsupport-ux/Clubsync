@@ -1,4 +1,5 @@
 import { getSchoolAdminContext } from "@/lib/school-admin";
+import { db } from "@/lib/db";
 import { logoutAction } from "@/app/actions/auth";
 import { switchProfileAction } from "@/app/actions/profile";
 import { AdminNavLinks, AdminMobileNavLinks } from "@/app/admin/admin-nav-links";
@@ -13,10 +14,12 @@ export default async function SchoolAdminLayout({
 }) {
   const { schoolId } = await params;
   const { school, user, isPlatformAdmin } = await getSchoolAdminContext(schoolId);
+  const pendingStaffCount = await db.user.count({ where: { accountKind: "STAFF", staffApprovalStatus: "PENDING", schoolId } });
 
-  const NAV: { href: string; label: string; icon: NavIconName }[] = [
+  const NAV: { href: string; label: string; icon: NavIconName; badge?: boolean }[] = [
     { href: `/school-admin/${schoolId}`, label: "Dashboard", icon: "LayoutDashboard" },
     { href: `/school-admin/${schoolId}/students`, label: "Students", icon: "GraduationCap" },
+    { href: `/school-admin/${schoolId}/teachers`, label: "Teachers", icon: "User", badge: pendingStaffCount > 0 },
     { href: `/school-admin/${schoolId}/clubs`, label: "Clubs", icon: "Users" },
     { href: `/school-admin/${schoolId}/settings`, label: "Settings", icon: "Settings" },
   ];

@@ -6,14 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CLUB_CATEGORIES } from "@/lib/constants";
 import { GrantAdminForm } from "./grant-admin-form";
 import { AdminList } from "./admin-list";
-import { PendingStaffList } from "./pending-staff-list";
 
 export const metadata: Metadata = { title: "Admin Settings" };
 
 export default async function AdminSettingsPage() {
   const admin = await requireAdmin();
 
-  const [schoolCount, userCount, clubCount, dbStats, admins, pendingStaff] = await Promise.all([
+  const [schoolCount, userCount, clubCount, dbStats, admins] = await Promise.all([
     db.school.count(),
     db.user.count(),
     db.club.count(),
@@ -21,11 +20,6 @@ export default async function AdminSettingsPage() {
     db.user.findMany({
       where: { platformRole: "PLATFORM_ADMIN" },
       select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true },
-      orderBy: { firstName: "asc" },
-    }),
-    db.user.findMany({
-      where: { accountKind: "STAFF", staffApprovalStatus: "PENDING" },
-      select: { id: true, firstName: true, lastName: true, email: true, avatarUrl: true, school: { select: { name: true } } },
       orderBy: { firstName: "asc" },
     }),
   ]);
@@ -91,12 +85,11 @@ export default async function AdminSettingsPage() {
 
       <Card>
         <CardContent className="p-5">
-          <p className="text-sm font-semibold text-text-primary">Pending Teacher Approvals</p>
-          <p className="mt-1 text-xs text-text-muted">
-            New Teacher accounts can&rsquo;t create a club until you approve them — this is what keeps a student from picking
-            &ldquo;Teacher&rdquo; at signup to create a club with no oversight.
-          </p>
-          <PendingStaffList pending={pendingStaff} />
+          <p className="text-sm font-semibold text-text-primary">Teachers</p>
+          <p className="mt-1 text-xs text-text-muted">Approve new Teacher accounts before they can create a club.</p>
+          <Link href="/admin/teachers" className="mt-3 inline-block text-sm font-medium text-accent">
+            Manage teachers →
+          </Link>
         </CardContent>
       </Card>
 
