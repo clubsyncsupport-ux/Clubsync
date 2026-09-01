@@ -49,9 +49,10 @@ export function CreateEventForm({
   const [invited, setInvited] = useState<string[]>([]);
   const [assigned, setAssigned] = useState<string[]>([]);
   const [awardsServiceHours, setAwardsServiceHours] = useState(prefill?.awardsServiceHours ?? false);
+  const [waitlistEnabled, setWaitlistEnabled] = useState(prefill?.waitlistEnabled ?? false);
   const [recurrence, setRecurrence] = useState<"NONE" | "DAILY" | "WEEKLY" | "MONTHLY">("NONE");
   const [allowedGrades, setAllowedGrades] = useState<string[]>(prefill?.allowedGrades ?? [...gradeLevels]);
-  const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[] }[]>([]);
+  const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[]; waitlistCapacity: string }[]>([]);
   const [roleInput, setRoleInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -86,7 +87,7 @@ export function CreateEventForm({
       setRoleInput("");
       return;
     }
-    setRoles((prev) => [...prev, { name, capacity: "1", allowedGrades: [...gradeLevels] }]);
+    setRoles((prev) => [...prev, { name, capacity: "1", allowedGrades: [...gradeLevels], waitlistCapacity: "" }]);
     setRoleInput("");
   }
 
@@ -96,6 +97,10 @@ export function CreateEventForm({
 
   function setRoleCapacity(name: string, capacity: string) {
     setRoles((prev) => prev.map((r) => (r.name === name ? { ...r, capacity } : r)));
+  }
+
+  function setRoleWaitlistCapacity(name: string, waitlistCapacity: string) {
+    setRoles((prev) => prev.map((r) => (r.name === name ? { ...r, waitlistCapacity } : r)));
   }
 
   function toggleRoleGrade(name: string, grade: string) {
@@ -126,6 +131,7 @@ export function CreateEventForm({
       formData.append("roleCapacity", String(Math.max(1, Number(r.capacity) || 1)));
       // Empty string means "every grade" — same convention as the event-level restriction.
       formData.append("roleAllowedGrades", r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : "");
+      formData.append("roleWaitlistCapacity", r.waitlistCapacity.trim());
     });
     // Only send a restriction if it's not "every grade" — that's the same as no restriction.
     if (allowedGrades.length > 0 && allowedGrades.length < gradeLevels.length) {
@@ -232,9 +238,21 @@ export function CreateEventForm({
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
-            <input type="checkbox" name="waitlistEnabled" defaultChecked={prefill?.waitlistEnabled} className="h-4 w-4 accent-accent" />
+            <input
+              type="checkbox"
+              name="waitlistEnabled"
+              checked={waitlistEnabled}
+              onChange={(e) => setWaitlistEnabled(e.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
             Enable waitlist once full
           </label>
+          {waitlistEnabled && (
+            <div className="pl-6">
+              <Label htmlFor="waitlistCapacity">Waitlist limit (optional)</Label>
+              <Input id="waitlistCapacity" name="waitlistCapacity" type="number" min={1} placeholder="No limit" className="max-w-32" />
+            </div>
+          )}
           <div>
             <Label>Grades allowed to register</Label>
             <div className="flex flex-wrap gap-2">
@@ -301,21 +319,44 @@ export function CreateEventForm({
                       Remove
                     </button>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 pl-0.5">
-                    <span className="mr-1 text-xs text-text-muted">Grades:</span>
-                    {gradeLevels.map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => toggleRoleGrade(r.name, g)}
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                          r.allowedGrades.includes(g) ? "border-accent bg-accent-soft text-accent-soft-text" : "border-border text-text-secondary"
-                        }`}
-                      >
-                        {g.replace("Grade ", "")}
-                      </button>
-                    ))}
+                  <div className="pl-0.5">
+                    <p className="mb-1 text-xs text-text-muted">Grades allowed for this role — tap to toggle which ones can join it:</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {gradeLevels.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => toggleRoleGrade(r.name, g)}
+                          title={r.allowedGrades.includes(g) ? `Remove ${g} from this role` : `Allow ${g} for this role`}
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                            r.allowedGrades.includes(g) ? "border-accent bg-accent-soft text-accent-soft-text" : "border-border text-text-secondary"
+                          }`}
+                        >
+                          {g.replace("Grade ", "")}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-text-muted">
+                      {r.allowedGrades.length === gradeLevels.length ? "Open to every grade." : "Highlighted grades can join this role — others can't."}
+                    </p>
                   </div>
+                  {waitlistEnabled && (
+                    <div className="flex items-center gap-2 pl-0.5">
+                      <Label htmlFor={`role-waitlist-${r.name}`} className="mb-0 shrink-0 text-xs text-text-muted">
+                        Waitlist limit for this role (optional)
+                      </Label>
+                      <div className="w-20 shrink-0">
+                        <Input
+                          id={`role-waitlist-${r.name}`}
+                          type="number"
+                          min={1}
+                          placeholder="No limit"
+                          value={r.waitlistCapacity}
+                          onChange={(e) => setRoleWaitlistCapacity(r.name, e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

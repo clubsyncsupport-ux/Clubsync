@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { CertificateGoalPicker } from "./certificate-goal-picker";
 export const metadata: Metadata = { title: "Service Hours" };
 
 export default async function ServiceHoursPage() {
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
 
   const [verifiedRecords, pendingSelfReported, byClub, achievements] = await Promise.all([
     db.serviceHourRecord.findMany({

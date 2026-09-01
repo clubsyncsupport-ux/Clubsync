@@ -34,6 +34,17 @@ export function directorClubs(viewer: Viewer) {
   return viewer.memberships.filter((m) => m.role === "DIRECTOR" || m.role === "OFFICER").map((m) => m.club);
 }
 
+// A STAFF account (a teacher who signed up directly as a Club Director, no
+// personal student profile) has nothing to do on the student-only pages
+// under (app) — Home, Calendar, Hours, Discover all assume a real student
+// profile. Settings and Notifications stay reachable for every account kind,
+// so this is called individually by the student-only pages, not the shared
+// (app) layout itself.
+export function requireStudentViewer(viewer: Viewer) {
+  if (viewer.accountKind === "STAFF") redirect("/teacher");
+  return viewer;
+}
+
 // Where a user should land after login / visiting "/" — STAFF accounts
 // (teachers, with no student profile) always land on their account-level
 // Teacher Dashboard first, whether they have zero, one, or several clubs —

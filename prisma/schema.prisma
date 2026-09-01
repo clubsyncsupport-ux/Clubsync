@@ -280,6 +280,10 @@ model Event {
   maxParticipants       Int?
   registrationDeadline  DateTime?
   waitlistEnabled       Boolean  @default(false)
+  // Caps how many people can sit on the waitlist itself, independent of
+  // maxParticipants (which caps REGISTERED, not WAITLISTED). Null means
+  // unlimited — only meaningful when waitlistEnabled is true.
+  waitlistCapacity      Int?
 
   awardsServiceHours    Boolean  @default(false)
   defaultServiceHours   Float    @default(0)
@@ -328,6 +332,10 @@ model EventRole {
   // event's own allowedGrades already filters (e.g. "Scorekeeper" can be
   // Grade 10+ even on an event otherwise open to every grade).
   allowedGrades String?
+  // Caps how many people can sit on the waitlist for this specific role,
+  // independent of the role's own capacity (REGISTERED) or the event's
+  // overall waitlistCapacity. Null means unlimited.
+  waitlistCapacity Int?
 
   registrations EventRegistration[]
 }

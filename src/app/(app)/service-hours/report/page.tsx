@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { format } from "date-fns";
 import { PrintButton } from "./print-button";
@@ -7,7 +7,7 @@ import { PrintButton } from "./print-button";
 export const metadata: Metadata = { title: "Service Hour Report" };
 
 export default async function ServiceHourReportPage() {
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   const records = await db.serviceHourRecord.findMany({
     where: { userId: viewer.id, status: "VERIFIED" },
     include: { club: true, event: true, approvedBy: true },

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { greeting } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Compass, Calendar as CalendarIcon, Clock, Ticket, type LucideIcon } fro
 export const metadata: Metadata = { title: "Home" };
 
 export default async function HomePage() {
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   const now = new Date();
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);

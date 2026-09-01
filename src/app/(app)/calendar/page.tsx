@@ -18,7 +18,7 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { getVisibleEvents } from "@/lib/data/calendar";
 import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
@@ -48,7 +48,7 @@ export default async function CalendarPage({
   const view: ViewType = (["month", "week", "day", "agenda"] as const).includes(rawView as ViewType) ? (rawView as ViewType) : "month";
   const refDate = rawDate ? startOfDay(parseISO(rawDate)) : startOfDay(new Date());
 
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   const clubIds = viewer.memberships.map((m) => m.clubId);
 
   let rangeStart: Date;

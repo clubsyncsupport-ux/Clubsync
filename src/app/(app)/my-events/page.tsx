@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { EventCard } from "@/components/event-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,7 +13,7 @@ import { BackButton } from "@/components/ui/back-button";
 export const metadata: Metadata = { title: "My Events" };
 
 export default async function MyEventsPage() {
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   const registrations = await db.eventRegistration.findMany({
     where: { userId: viewer.id, status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED"] } },
     include: { event: { include: { club: true } } },

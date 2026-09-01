@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getViewer, getPendingMembershipClubIds } from "@/lib/viewer";
+import { getViewer, getPendingMembershipClubIds, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { ClubCard } from "@/components/club-card";
 import { parseCategories } from "@/lib/categories";
@@ -16,7 +16,7 @@ export default async function DiscoverPage({
   searchParams: Promise<{ q?: string; category?: string }>;
 }) {
   const { q, category } = await searchParams;
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   const pendingClubIds = await getPendingMembershipClubIds(viewer.id);
 
   const allClubs = await db.club.findMany({

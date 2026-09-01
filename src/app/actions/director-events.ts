@@ -31,6 +31,7 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
   const maxParticipantsRaw = String(formData.get("maxParticipants") ?? "").trim();
   const registrationDeadlineRaw = String(formData.get("registrationDeadline") ?? "").trim();
   const waitlistEnabled = formData.get("waitlistEnabled") === "on";
+  const waitlistCapacityRaw = String(formData.get("waitlistCapacity") ?? "").trim();
   const awardsServiceHours = formData.get("awardsServiceHours") === "on";
   const defaultServiceHours = Number(formData.get("defaultServiceHours") ?? 0);
   const serviceTaskDescription = String(formData.get("serviceTaskDescription") ?? "").trim() || null;
@@ -50,8 +51,14 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
   const roleNames = formData.getAll("roleName").map(String);
   const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
   const roleAllowedGradesRaw = formData.getAll("roleAllowedGrades").map(String);
+  const roleWaitlistCapacitiesRaw = formData.getAll("roleWaitlistCapacity").map(String);
   const roles = roleNames
-    .map((name, i) => ({ name: name.trim(), capacity: roleCapacities[i], allowedGrades: roleAllowedGradesRaw[i]?.trim() || null }))
+    .map((name, i) => ({
+      name: name.trim(),
+      capacity: roleCapacities[i],
+      allowedGrades: roleAllowedGradesRaw[i]?.trim() || null,
+      waitlistCapacity: roleWaitlistCapacitiesRaw[i]?.trim() ? Number(roleWaitlistCapacitiesRaw[i]) : null,
+    }))
     .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
@@ -102,6 +109,7 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         maxParticipants: maxParticipantsRaw ? Number(maxParticipantsRaw) : null,
         registrationDeadline: registrationDeadlineRaw ? new Date(registrationDeadlineRaw) : null,
         waitlistEnabled,
+        waitlistCapacity: waitlistEnabled && waitlistCapacityRaw ? Number(waitlistCapacityRaw) : null,
         awardsServiceHours,
         defaultServiceHours: awardsServiceHours ? defaultServiceHours : 0,
         serviceTaskDescription,
@@ -114,7 +122,15 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         attachments: savedAttachments.length ? { create: savedAttachments } : undefined,
         registrations: assignedUserIds.length ? { create: assignedUserIds.map((userId) => ({ userId, status: "REGISTERED" as const })) } : undefined,
         roles: roles.length
-          ? { create: roles.map((r, i) => ({ name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, order: i })) }
+          ? {
+              create: roles.map((r, i) => ({
+                name: r.name,
+                capacity: r.capacity,
+                allowedGrades: r.allowedGrades,
+                waitlistCapacity: r.waitlistCapacity,
+                order: i,
+              })),
+            }
           : undefined,
       },
     });
@@ -303,18 +319,23 @@ export async function finalizeEventAction(
     { timeout: 15000 }
   );
 
-  for (const [userId] of entries) {
-    await checkAndUnlockAchievements(userId);
-    await db.notification.create({
-      data: {
-        userId,
-        type: "SERVICE_HOURS",
-        title: "Service hours verified",
-        body: `${event.title} — ${hoursByUser[userId]} hours`,
-        linkUrl: "/service-hours",
-      },
-    });
-  }
+  // Same sequential-loop pitfall as the transaction above, just outside it —
+  // at 50+ attendees this could get slow enough to risk a request timeout,
+  // even though nothing here needs to be atomic with anything else.
+  await Promise.all(
+    entries.map(async ([userId]) => {
+      await checkAndUnlockAchievements(userId);
+      await db.notification.create({
+        data: {
+          userId,
+          type: "SERVICE_HOURS",
+          title: "Service hours verified",
+          body: `${event.title} — ${hoursByUser[userId]} hours`,
+          linkUrl: "/service-hours",
+        },
+      });
+    })
+  );
 
   revalidatePath(`/director/${event.clubId}/events/${eventId}`);
   revalidatePath(`/director/${event.clubId}/events`);

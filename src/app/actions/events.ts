@@ -85,6 +85,33 @@ async function attemptRegisterForEvent(userId: string, eventId: string, roleId?:
     }
   }
 
+  // The waitlist itself can have its own cap, independent of maxParticipants
+  // (which only limits REGISTERED). Checked at whichever granularity applies
+  // — a role's own waitlist cap if this join is for a specific role, and the
+  // event's overall waitlist cap either way — so the waitlist can't grow
+  // unbounded once someone actually needs it.
+  if (status === "WAITLISTED") {
+    // Exclude the person's own existing registration from these counts —
+    // otherwise someone already waitlisted who re-submits (e.g. switching
+    // roles) would get falsely blocked by their own prior row.
+    if (role?.waitlistCapacity != null) {
+      const roleWaitlistCount = await db.eventRegistration.count({
+        where: { eventId, roleId: role.id, status: "WAITLISTED", userId: { not: userId } },
+      });
+      if (roleWaitlistCount >= role.waitlistCapacity) {
+        return { ok: false, error: `The waitlist for the "${role.name}" role is full.` };
+      }
+    }
+    if (event.waitlistCapacity != null) {
+      const eventWaitlistCount = await db.eventRegistration.count({
+        where: { eventId, status: "WAITLISTED", userId: { not: userId } },
+      });
+      if (eventWaitlistCount >= event.waitlistCapacity) {
+        return { ok: false, error: "The waitlist for this event is full." };
+      }
+    }
+  }
+
   await db.eventRegistration.upsert({
     where: { eventId_userId: { eventId, userId } },
     update: { status, roleId: role?.id ?? null },

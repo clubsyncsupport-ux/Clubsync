@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getViewer } from "@/lib/viewer";
+import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { ColorDot, Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { BackButton } from "@/components/ui/back-button";
 export const metadata: Metadata = { title: "My Clubs" };
 
 export default async function MyClubsPage() {
-  const viewer = await getViewer();
+  const viewer = requireStudentViewer(await getViewer());
   // getViewer()'s memberships are ACTIVE-only — fetch PENDING ones too so a
   // requested-to-join private club still shows up here instead of vanishing.
   const memberships = await db.clubMembership.findMany({

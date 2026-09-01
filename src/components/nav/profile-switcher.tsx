@@ -78,7 +78,12 @@ function ProfileSwitcherMenu({
 
   const activeLabel =
     active.kind === "student"
-      ? "Student"
+      ? // getActiveProfile() defaults to "student" whenever no cookie is set
+        // yet (e.g. right after a fresh login) — meaningless for a STAFF
+        // account, which has no student profile to actually be viewing.
+        isStaff
+        ? "Teacher"
+        : "Student"
       : active.kind === "admin"
         ? "Platform Admin"
         : active.kind === "school-admin"
