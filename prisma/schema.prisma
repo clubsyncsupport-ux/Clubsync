@@ -51,12 +51,16 @@ model User {
   // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED"
   accountStatus     String   @default("ACTIVE")
   // Login rate-limiting: counts consecutive failed password attempts, reset
-  // to 0 on a successful login. Once it crosses LOCKOUT_THRESHOLD (see
-  // local-provider.ts), lockedUntil is set and further attempts are refused
-  // until that time passes, regardless of whether the password given is
-  // actually correct.
+  // to 0 on a successful login. Crossing each tier in LOCKOUT_TIERS (see
+  // local-provider.ts) sets lockedUntil to an escalating duration; further
+  // attempts are refused until that time passes, regardless of whether the
+  // password given is actually correct. Reaching the final tier also sets
+  // mustResetPassword, which blocks sign-in outright (even after the lock
+  // expires) until the account owner completes the "forgot password" flow —
+  // proof of email access rather than another guessed password.
   failedLoginAttempts Int      @default(0)
   lockedUntil         DateTime?
+  mustResetPassword   Boolean  @default(false)
   // Set when this account has been merged into another (see mergeUserAccountsAction) —
   // its club memberships, service-hour records, and event registrations have been
   // moved to mergedIntoId, and this account can no longer log in. Plain id reference,

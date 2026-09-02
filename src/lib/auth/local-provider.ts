@@ -5,11 +5,36 @@ import { sendPasswordResetEmail } from "@/lib/email";
 import type { AuthProvider, AuthResult, GoogleProfile, SignInInput, SignUpInput } from "./types";
 
 const SESSION_DAYS = 30;
-// Login rate-limiting: after this many consecutive wrong passwords, the
-// account is locked for LOCKOUT_MINUTES regardless of whether a later
-// attempt has the correct password — see signIn() below.
-const LOCKOUT_THRESHOLD = 5;
-const LOCKOUT_MINUTES = 15;
+// Login rate-limiting: escalating lockout tiers. Each tier fires exactly when
+// cumulative failedLoginAttempts hits its `attempts` value (attempts only
+// increments while the account isn't currently locked, so in practice these
+// land in order: 5 wrong -> 15min, 3 more (8) -> 30min, 3 more (11) -> 1hr,
+// 2 more (13) -> 6hr, 2 more (15) -> 1 day AND the account is flagged
+// mustResetPassword — at that point the lock timer stops mattering: sign-in
+// stays refused until the owner completes "forgot password" (proof of email
+// access), rather than just repeating the 1-day lock forever. A successful
+// login, or a completed password reset, clears everything back to zero.
+const LOCKOUT_TIERS = [
+  { attempts: 5, minutes: 15 },
+  { attempts: 8, minutes: 30 },
+  { attempts: 11, minutes: 60 },
+  { attempts: 13, minutes: 360 },
+  { attempts: 15, minutes: 1440 },
+] as const;
+const CEILING_ATTEMPTS = LOCKOUT_TIERS[LOCKOUT_TIERS.length - 1].attempts;
+
+function lockoutMinutesFor(attempts: number): number | null {
+  return LOCKOUT_TIERS.find((t) => t.attempts === attempts)?.minutes ?? null;
+}
+
+function formatDuration(ms: number): string {
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.ceil(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
 
 function toSessionUser(u: { id: string; email: string; firstName: string; lastName: string }) {
   return { id: u.id, email: u.email, firstName: u.firstName, lastName: u.lastName };
@@ -78,16 +103,30 @@ export const localAuthProvider: AuthProvider = {
       return { ok: false, error: "Incorrect email or password." };
     }
 
+    if (user.mustResetPassword) {
+      return {
+        ok: false,
+        error: "For your security, this account needs a password reset before signing in again. Use \"Forgot password\" to continue.",
+      };
+    }
+
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
-      return { ok: false, error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` };
+      const remaining = formatDuration(user.lockedUntil.getTime() - Date.now());
+      return { ok: false, error: `Too many failed attempts. Try again in ${remaining}.` };
     }
 
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
       const attempts = user.failedLoginAttempts + 1;
-      const lockedUntil = attempts >= LOCKOUT_THRESHOLD ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000) : null;
-      await db.user.update({ where: { id: user.id }, data: { failedLoginAttempts: attempts, lockedUntil } });
+      const lockoutMinutes = lockoutMinutesFor(attempts);
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: attempts,
+          lockedUntil: lockoutMinutes ? new Date(Date.now() + lockoutMinutes * 60_000) : null,
+          ...(attempts >= CEILING_ATTEMPTS ? { mustResetPassword: true } : {}),
+        },
+      });
       return { ok: false, error: "Incorrect email or password." };
     }
 
@@ -143,7 +182,10 @@ export const localAuthProvider: AuthProvider = {
     const passwordError = validatePassword(newPassword);
     if (passwordError) return { ok: false, error: passwordError };
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.user.update({ where: { id: userId }, data: { passwordHash } });
+    await db.user.update({
+      where: { id: userId },
+      data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null, mustResetPassword: false },
+    });
     return { ok: true };
   },
 
@@ -173,7 +215,10 @@ export const localAuthProvider: AuthProvider = {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await db.$transaction([
-      db.user.update({ where: { id: record.userId }, data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null } }),
+      db.user.update({
+        where: { id: record.userId },
+        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null, mustResetPassword: false },
+      }),
       db.passwordResetToken.delete({ where: { id: record.id } }),
       db.session.deleteMany({ where: { userId: record.userId } }),
     ]);

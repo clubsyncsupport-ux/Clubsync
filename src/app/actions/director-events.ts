@@ -164,6 +164,11 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
   const date = String(formData.get("date") ?? "");
   const startTime = String(formData.get("startTime") ?? "15:00");
   const endTime = String(formData.get("endTime") ?? "16:00");
+  const visibility = String(formData.get("visibility") ?? "PUBLIC") as "PUBLIC" | "PRIVATE";
+  const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
+  const waitlistEnabled = formData.get("waitlistEnabled") === "on";
+  const waitlistCapacityRaw = String(formData.get("waitlistCapacity") ?? "").trim();
+  const registrationDeadlineRaw = String(formData.get("registrationDeadline") ?? "").trim();
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
 
@@ -178,14 +183,68 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
       building: String(formData.get("building") ?? "").trim() || null,
       room: String(formData.get("room") ?? "").trim() || null,
       address: String(formData.get("address") ?? "").trim() || null,
+      visibility,
+      allowedGrades,
       maxParticipants: String(formData.get("maxParticipants") ?? "").trim() ? Number(formData.get("maxParticipants")) : null,
-      waitlistEnabled: formData.get("waitlistEnabled") === "on",
+      registrationDeadline: registrationDeadlineRaw ? new Date(registrationDeadlineRaw) : null,
+      waitlistEnabled,
+      waitlistCapacity: waitlistEnabled && waitlistCapacityRaw ? Number(waitlistCapacityRaw) : null,
       awardsServiceHours: formData.get("awardsServiceHours") === "on",
       defaultServiceHours: formData.get("awardsServiceHours") === "on" ? Number(formData.get("defaultServiceHours") ?? 0) : 0,
       serviceTaskDescription: String(formData.get("serviceTaskDescription") ?? "").trim() || null,
       attendanceEnabled: formData.get("attendanceEnabled") === "on",
     },
   });
+
+  // Roles: parallel arrays (index-matched), same convention as
+  // createEventAction. roleId is "" for a role added during this edit.
+  // updateMany (not update) scopes by eventId too, so a tampered roleId from
+  // another event silently matches nothing instead of editing someone else's role.
+  const roleIds = formData.getAll("roleId").map(String);
+  const roleNames = formData.getAll("roleName").map(String);
+  const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
+  const roleAllowedGradesRaw = formData.getAll("roleAllowedGrades").map(String);
+  const roleWaitlistCapacitiesRaw = formData.getAll("roleWaitlistCapacity").map(String);
+  const roleDrafts = roleNames
+    .map((name, i) => ({
+      id: roleIds[i] || null,
+      name: name.trim(),
+      capacity: roleCapacities[i],
+      allowedGrades: roleAllowedGradesRaw[i]?.trim() || null,
+      waitlistCapacity: roleWaitlistCapacitiesRaw[i]?.trim() ? Number(roleWaitlistCapacitiesRaw[i]) : null,
+    }))
+    .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
+
+  let newRoleOrder = await db.eventRole.count({ where: { eventId } });
+  for (const r of roleDrafts) {
+    if (r.id) {
+      await db.eventRole.updateMany({
+        where: { id: r.id, eventId },
+        data: { name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity },
+      });
+    } else {
+      await db.eventRole.create({
+        data: { eventId, name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity, order: newRoleOrder++ },
+      });
+    }
+  }
+
+  // Only delete a removed role if it truly has no active registrants —
+  // re-checked here rather than trusting the disabled-button in the UI.
+  // (Registrations would survive anyway via onDelete: SetNull, but a silent
+  // deletion would confusingly strand someone's chosen role as "no role".)
+  const removedRoleIds = formData.getAll("removedRoleId").map(String);
+  if (removedRoleIds.length > 0) {
+    const registrantsInRemovedRoles = await db.eventRegistration.findMany({
+      where: { eventId, roleId: { in: removedRoleIds }, status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED", "NO_SHOW"] } },
+      select: { roleId: true },
+    });
+    const rolesWithRegistrants = new Set(registrantsInRemovedRoles.map((r) => r.roleId));
+    const safeToDelete = removedRoleIds.filter((id) => !rolesWithRegistrants.has(id));
+    if (safeToDelete.length > 0) {
+      await db.eventRole.deleteMany({ where: { id: { in: safeToDelete }, eventId } });
+    }
+  }
 
   // Adding newly-assigned students here — never removing. Un-assigning goes
   // through the existing "Remove" control in the Registrants list instead,
@@ -213,8 +272,31 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
     });
   }
 
+  // Visibility/invites: sync to whatever's checked, but a student already on
+  // the roster (registered before or just assigned above) always keeps
+  // access — switching to Private, or unchecking them, must never leave a
+  // registered student unable to view the event they're signed up for.
+  if (visibility === "PRIVATE") {
+    const checkedInviteIds = formData.getAll("inviteUserIds").map(String);
+    const activeRegistrations = await db.eventRegistration.findMany({
+      where: { eventId, status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED", "NO_SHOW"] } },
+      select: { userId: true },
+    });
+    const finalInviteIds = Array.from(
+      new Set([...checkedInviteIds, ...assignedUserIds, ...activeRegistrations.map((r) => r.userId)])
+    );
+    await db.eventInvite.deleteMany({ where: { eventId, userId: { notIn: finalInviteIds.length ? finalInviteIds : ["__none__"] } } });
+    if (finalInviteIds.length > 0) {
+      await db.eventInvite.createMany({ data: finalInviteIds.map((userId) => ({ eventId, userId })), skipDuplicates: true });
+    }
+  } else {
+    await db.eventInvite.deleteMany({ where: { eventId } });
+  }
+
   revalidatePath(`/director/${event.clubId}/events/${eventId}`);
   revalidatePath(`/director/${event.clubId}/events`);
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/calendar");
   return { error: null };
 }
 
