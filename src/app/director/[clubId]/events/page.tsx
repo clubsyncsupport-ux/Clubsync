@@ -22,15 +22,37 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
   const { clubId } = await params;
   const { club } = await getDirectorContext(clubId);
 
-  const events = await db.event.findMany({
-    where: { clubId, recurrenceParentId: null },
+  const allEvents = await db.event.findMany({
+    where: { clubId },
     include: {
       _count: { select: { registrations: { where: { status: { in: ["REGISTERED", "ATTENDED"] } } } } },
       roles: { include: { _count: { select: { registrations: { where: { status: "REGISTERED" } } } } } },
     },
-    orderBy: { startAt: "desc" },
-    take: 100,
+    orderBy: { startAt: "asc" },
   });
+
+  // A recurring series is stored as one Event row per occurrence, so listing
+  // every row here would flood this page with (say) 52 near-identical weekly
+  // meetings. Group by series instead and surface one card per series — but
+  // the card the club actually wants to see is whichever occurrence is next,
+  // not always the very first one ever created, which goes stale (and can
+  // even show a past-due "Mark Completed" prompt) the moment its own date
+  // passes while the rest of the series is still running.
+  const seriesByRoot = new Map<string, typeof allEvents>();
+  for (const e of allEvents) {
+    const root = e.recurrenceParentId ?? e.id;
+    const group = seriesByRoot.get(root);
+    if (group) group.push(e);
+    else seriesByRoot.set(root, [e]);
+  }
+  const now = new Date();
+  const events = Array.from(seriesByRoot.values())
+    .map((occurrences) => {
+      const upcoming = occurrences.find((o) => o.status === "SCHEDULED" && o.startAt >= now);
+      return { event: upcoming ?? occurrences[occurrences.length - 1], occurrenceCount: occurrences.length };
+    })
+    .sort((a, b) => b.event.startAt.getTime() - a.event.startAt.getTime())
+    .slice(0, 100);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 animate-fade-in">
@@ -47,7 +69,7 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
         </Card>
       ) : (
         <div className="mt-6 space-y-2">
-          {events.map((e) => {
+          {events.map(({ event: e, occurrenceCount }) => {
             const isFull = e.maxParticipants != null && e._count.registrations >= e.maxParticipants;
             const rolesFull = e.roles.length > 0 && e.roles.every((r) => r._count.registrations >= r.capacity);
             return (
@@ -61,7 +83,7 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
                       <ColorDot color={club.color} />
                       {e._count.registrations}
                       {e.maxParticipants != null ? ` / ${e.maxParticipants}` : ""} registered
-                      {e.recurrence !== "NONE" && <span>· Recurring</span>}
+                      {occurrenceCount > 1 && <span>· Recurring ({occurrenceCount} dates — see Calendar for all)</span>}
                     </div>
                   </Link>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">

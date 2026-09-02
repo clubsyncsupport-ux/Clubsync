@@ -66,6 +66,7 @@ export function EditEventForm({
   const [assigned, setAssigned] = useState<string[]>([]);
   const [awardsServiceHours, setAwardsServiceHours] = useState(event.awardsServiceHours);
   const [waitlistEnabled, setWaitlistEnabled] = useState(event.waitlistEnabled);
+  const [endsNextDay, setEndsNextDay] = useState(() => format(event.startAt, "yyyy-MM-dd") !== format(event.endAt, "yyyy-MM-dd"));
   const [allowedGrades, setAllowedGrades] = useState<string[]>(event.allowedGrades ?? [...gradeLevels]);
   const [roles, setRoles] = useState<RoleDraft[]>(
     initialRoles.map((r) => ({
@@ -141,6 +142,12 @@ export function EditEventForm({
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const startTime = String(formData.get("startTime") ?? "");
+    const endTime = String(formData.get("endTime") ?? "");
+    if (!endsNextDay && startTime && endTime && endTime <= startTime) {
+      setError('End time must be after start time — check "Ends the next day" above for an overnight event.');
+      return;
+    }
     if (allowedGrades.length === 0) {
       setError("Select at least one grade that can register — or select all of them for no restriction.");
       return;
@@ -216,6 +223,16 @@ export function EditEventForm({
               <Input id="endTime" name="endTime" type="time" defaultValue={format(event.endAt, "HH:mm")} required />
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              name="endsNextDay"
+              checked={endsNextDay}
+              onChange={(e) => setEndsNextDay(e.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            Ends the next day (overnight event)
+          </label>
           {event.isRecurring && (
             <p className="text-xs text-text-muted">
               This is one occurrence of a recurring series. Changing the date/time here only moves this occurrence — use Cancel on the

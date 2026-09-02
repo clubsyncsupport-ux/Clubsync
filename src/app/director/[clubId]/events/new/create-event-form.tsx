@@ -51,6 +51,7 @@ export function CreateEventForm({
   const [awardsServiceHours, setAwardsServiceHours] = useState(prefill?.awardsServiceHours ?? false);
   const [waitlistEnabled, setWaitlistEnabled] = useState(prefill?.waitlistEnabled ?? false);
   const [recurrence, setRecurrence] = useState<"NONE" | "DAILY" | "WEEKLY" | "MONTHLY">("NONE");
+  const [endsNextDay, setEndsNextDay] = useState(false);
   const [allowedGrades, setAllowedGrades] = useState<string[]>(prefill?.allowedGrades ?? [...gradeLevels]);
   const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[]; waitlistCapacity: string }[]>([]);
   const [roleInput, setRoleInput] = useState("");
@@ -113,6 +114,12 @@ export function CreateEventForm({
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const startTime = String(formData.get("startTime") ?? "");
+    const endTime = String(formData.get("endTime") ?? "");
+    if (!endsNextDay && startTime && endTime && endTime <= startTime) {
+      setError('End time must be after start time — check "Ends the next day" below for an overnight event.');
+      return;
+    }
     if (allowedGrades.length === 0) {
       setError("Select at least one grade that can register — or select all of them for no restriction.");
       return;
@@ -186,6 +193,16 @@ export function CreateEventForm({
               <Input id="endTime" name="endTime" type="time" defaultValue="16:30" required />
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              name="endsNextDay"
+              checked={endsNextDay}
+              onChange={(e) => setEndsNextDay(e.target.checked)}
+              className="h-4 w-4 accent-accent"
+            />
+            Ends the next day (overnight event)
+          </label>
           <div>
             <Label htmlFor="recurrence">Repeats</Label>
             <Select id="recurrence" name="recurrence" value={recurrence} onChange={(e) => setRecurrence(e.target.value as typeof recurrence)}>

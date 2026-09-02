@@ -86,24 +86,24 @@ function RecurringCancelPicker({ eventId, clubId, onClose }: { eventId: string; 
   }
 
   return (
-    <Card className="border-danger/30 bg-danger-soft">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
+    <Card className="w-full max-w-md border-danger/30 bg-danger-soft">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-6">
           <p className="text-sm font-semibold text-text-primary">Choose which dates to cancel</p>
-          <button type="button" onClick={onClose} className="text-xs text-text-muted hover:text-text-primary">
+          <button type="button" onClick={onClose} className="shrink-0 text-xs text-text-muted hover:text-text-primary">
             Close
           </button>
         </div>
 
         {done !== null ? (
-          <p className="mt-3 text-sm text-success">
+          <p className="mt-4 text-sm text-success">
             Cancelled {done} event{done === 1 ? "" : "s"}.
           </p>
         ) : occurrences === null ? (
-          <p className="mt-3 text-sm text-text-muted">Loading dates…</p>
+          <p className="mt-4 text-sm text-text-muted">Loading dates…</p>
         ) : (
           <>
-            <label className="mt-3 flex items-center gap-2 border-b border-border pb-2 text-sm font-medium text-text-primary">
+            <label className="mt-4 flex items-center gap-2 border-b border-border pb-3 text-sm font-medium text-text-primary">
               <input
                 type="checkbox"
                 checked={occurrences.filter((o) => !o.cancelled).length > 0 && occurrences.filter((o) => !o.cancelled).every((o) => selected.has(o.id))}
@@ -112,9 +112,9 @@ function RecurringCancelPicker({ eventId, clubId, onClose }: { eventId: string; 
               />
               Select all
             </label>
-            <div className="mt-1 max-h-56 space-y-0.5 overflow-y-auto">
+            <div className="mt-2 max-h-56 space-y-1 overflow-y-auto">
               {occurrences.map((o) => (
-                <label key={o.id} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm hover:bg-surface-2">
+                <label key={o.id} className="flex items-center gap-2 rounded-lg px-1.5 py-2 text-sm hover:bg-surface-2">
                   <input
                     type="checkbox"
                     disabled={o.cancelled}
@@ -129,7 +129,7 @@ function RecurringCancelPicker({ eventId, clubId, onClose }: { eventId: string; 
                 </label>
               ))}
             </div>
-            <Button variant="danger" size="sm" className="mt-3 w-full" disabled={pending || selected.size === 0} onClick={submit}>
+            <Button variant="danger" size="sm" className="mt-4 w-full" disabled={pending || selected.size === 0} onClick={submit}>
               {pending ? "Cancelling…" : `Cancel ${selected.size || ""} Selected`.trim()}
             </Button>
           </>

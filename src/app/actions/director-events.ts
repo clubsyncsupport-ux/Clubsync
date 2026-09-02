@@ -11,8 +11,10 @@ import type { Event } from "@prisma/client";
 
 export type ActionState = { error: string | null };
 
-function combineDateTime(date: string, time: string): Date {
-  return new Date(`${date}T${time}`);
+function combineDateTime(date: string, time: string, dayOffset = 0): Date {
+  const dt = new Date(`${date}T${time}`);
+  if (dayOffset) dt.setDate(dt.getDate() + dayOffset);
+  return dt;
 }
 
 export async function createEventAction(clubId: string, formData: FormData): Promise<ActionState> {
@@ -24,6 +26,7 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
   const date = String(formData.get("date") ?? "");
   const startTime = String(formData.get("startTime") ?? "15:00");
   const endTime = String(formData.get("endTime") ?? "16:00");
+  const endsNextDay = formData.get("endsNextDay") === "on";
   const building = String(formData.get("building") ?? "").trim() || null;
   const room = String(formData.get("room") ?? "").trim() || null;
   const address = String(formData.get("address") ?? "").trim() || null;
@@ -63,6 +66,13 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
 
+  const startAt = combineDateTime(date, startTime);
+  const endAt = combineDateTime(date, endTime, endsNextDay ? 1 : 0);
+  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: "Invalid date or time." };
+  if (endAt <= startAt) {
+    return { error: "End time must be after start time — check \"Ends the next day\" for an overnight event." };
+  }
+
   const savedAttachments: { filename: string; url: string; mimeType: string; size: number }[] = [];
   for (const file of attachmentFiles) {
     try {
@@ -71,10 +81,6 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
       return { error: e instanceof Error ? e.message : "One of the attachments failed to upload." };
     }
   }
-
-  const startAt = combineDateTime(date, startTime);
-  const endAt = combineDateTime(date, endTime);
-  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: "Invalid date or time." };
 
   const occurrences: Date[] = [startAt];
   if (recurrence !== "NONE" && recurrenceUntilRaw) {
@@ -164,6 +170,7 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
   const date = String(formData.get("date") ?? "");
   const startTime = String(formData.get("startTime") ?? "15:00");
   const endTime = String(formData.get("endTime") ?? "16:00");
+  const endsNextDay = formData.get("endsNextDay") === "on";
   const visibility = String(formData.get("visibility") ?? "PUBLIC") as "PUBLIC" | "PRIVATE";
   const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
   const waitlistEnabled = formData.get("waitlistEnabled") === "on";
@@ -172,14 +179,21 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
 
+  const startAt = combineDateTime(date, startTime);
+  const endAt = combineDateTime(date, endTime, endsNextDay ? 1 : 0);
+  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: "Invalid date or time." };
+  if (endAt <= startAt) {
+    return { error: "End time must be after start time — check \"Ends the next day\" for an overnight event." };
+  }
+
   await db.event.update({
     where: { id: eventId },
     data: {
       title,
       description,
       category: String(formData.get("category") ?? event.category),
-      startAt: combineDateTime(date, startTime),
-      endAt: combineDateTime(date, endTime),
+      startAt,
+      endAt,
       building: String(formData.get("building") ?? "").trim() || null,
       room: String(formData.get("room") ?? "").trim() || null,
       address: String(formData.get("address") ?? "").trim() || null,
