@@ -65,6 +65,7 @@ export function SignUpForm({ initialError }: { initialError?: string | null }) {
         </div>
 
         <form action={formAction} className="space-y-4">
+          <input type="hidden" name="agreedToTerms" value={agreed ? "on" : ""} />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="firstName">First name</Label>

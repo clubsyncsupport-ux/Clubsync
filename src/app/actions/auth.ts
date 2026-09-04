@@ -8,6 +8,14 @@ import { resolveLandingPath } from "@/lib/viewer";
 export type FormState = { error: string | null };
 
 export async function signUpAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  // The "I agree to the Privacy Policy and Terms of Use" checkbox lives outside
+  // this form (it also gates the Google button) and is only wired up as a
+  // client-side UI convenience — this re-checks it server-side so a direct
+  // POST can't create an account without ever agreeing to anything.
+  if (formData.get("agreedToTerms") !== "on") {
+    return { error: "You must agree to the Privacy Policy and Terms of Use to create an account." };
+  }
+
   const result = await authProvider.signUp({
     firstName: String(formData.get("firstName") ?? ""),
     lastName: String(formData.get("lastName") ?? ""),
