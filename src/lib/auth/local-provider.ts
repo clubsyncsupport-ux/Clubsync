@@ -138,12 +138,15 @@ export const localAuthProvider: AuthProvider = {
     return { ok: true, user: toSessionUser(user), sessionToken: token, expiresAt };
   },
 
-  async signInWithGoogle(profile: GoogleProfile) {
+  async signInWithGoogle(profile: GoogleProfile, opts: { hasConsent: boolean }) {
     const email = profile.email.trim().toLowerCase();
 
     let user = await db.user.findUnique({ where: { googleId: profile.googleId } });
     if (!user) {
       const existingByEmail = await db.user.findUnique({ where: { email } });
+      if (!existingByEmail && !opts.hasConsent) {
+        return { ok: false, error: "You must agree to the Privacy Policy and Terms of Use to create an account." };
+      }
       user = existingByEmail
         ? await db.user.update({ where: { id: existingByEmail.id }, data: { googleId: profile.googleId } })
         : await db.user.create({

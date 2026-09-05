@@ -388,6 +388,7 @@ export function CreateEventForm({
         <CardContent className="space-y-4 p-5">
           <p className="text-sm font-semibold text-text-primary">Attachments (optional)</p>
           <p className="text-xs text-text-muted">Permission forms, posters, or any files members should see when they register. You can add more later too.</p>
+          <p className="text-xs text-text-muted">Only upload photos/videos of students with their parent or guardian&rsquo;s permission, and avoid ones showing a student&rsquo;s full name, address, or phone number.</p>
           <FileUploadButton name="attachments" multiple accept="image/*,.pdf,.doc,.docx,video/*" label="Add Files" />
         </CardContent>
       </Card>

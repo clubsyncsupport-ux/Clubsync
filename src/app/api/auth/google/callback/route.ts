@@ -6,6 +6,7 @@ import { resolveLandingPath } from "@/lib/viewer";
 import { getRequestOrigin } from "@/lib/request-origin";
 
 const STATE_COOKIE = "clubsync_oauth_state";
+const SIGNUP_CONSENT_COOKIE = "clubsync_signup_consent";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -16,7 +17,9 @@ export async function GET(request: Request) {
 
   const jar = await cookies();
   const expectedState = jar.get(STATE_COOKIE)?.value;
+  const hasSignupConsent = jar.get(SIGNUP_CONSENT_COOKIE)?.value === "1";
   jar.delete(STATE_COOKIE);
+  jar.delete(SIGNUP_CONSENT_COOKIE);
 
   if (googleError) {
     // The student closed/cancelled Google's consent screen — not a real error.
@@ -58,13 +61,19 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/login?error=google_unverified_email", origin));
     }
 
-    const result = await authProvider.signInWithGoogle({
-      googleId: profile.sub,
-      email: profile.email,
-      firstName: profile.given_name ?? profile.name ?? "Student",
-      lastName: profile.family_name ?? "",
-      avatarUrl: profile.picture,
-    });
+    const result = await authProvider.signInWithGoogle(
+      {
+        googleId: profile.sub,
+        email: profile.email,
+        firstName: profile.given_name ?? profile.name ?? "Student",
+        lastName: profile.family_name ?? "",
+        avatarUrl: profile.picture,
+      },
+      { hasConsent: hasSignupConsent }
+    );
+    if (!result.ok) {
+      return NextResponse.redirect(new URL("/signup?error=google_consent_required", origin));
+    }
 
     await setSessionCookie(result.sessionToken, result.expiresAt);
     return NextResponse.redirect(new URL(await resolveLandingPath(result.user.id), origin));

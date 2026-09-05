@@ -126,7 +126,8 @@ export default function PrivacyPage() {
               <a href="#p11">11. Children &amp; students</a>
               <a href="#p12">12. Built with AI assistance</a>
               <a href="#p13">13. Cookies</a>
-              <a href="#p14">14. Changes to this policy</a>
+              <a href="#p14">14. If something goes wrong</a>
+              <a href="#p15">15. Changes to this policy</a>
             </div>
             <div className="group">
               <p className="group-label">Terms of Use</p>
@@ -218,7 +219,7 @@ export default function PrivacyPage() {
 
               <section className="legal-clause" id="p6">
                 <h3><span className="num">6</span>Where your information is stored</h3>
-                <p>ClubSync&rsquo;s website is hosted with Vercel, and its database is hosted with Supabase, in Supabase&rsquo;s Canada (Central) data centre. Your information is encrypted in transit (HTTPS) and the database itself is not publicly accessible.</p>
+                <p>ClubSync&rsquo;s website is hosted with Vercel, and its database is hosted with Supabase, in Supabase&rsquo;s Canada (Central) data centre. Your information is encrypted in transit (HTTPS) and the database itself is not publicly accessible. Password-reset emails are sent through Resend, a transactional email provider — it only ever sees the one-time reset link and your email address for that single message, never your broader account data.</p>
                 <div className="legal-note">
                   <strong>If your school formally adopts ClubSync</strong> as an official tool (rather than the current independent, student-run pilot), British Columbia&rsquo;s public-sector privacy law (FIPPA) still expects a Privacy Impact Assessment as part of that formal adoption process — that process would happen as part of the school taking ClubSync on, not something silently skipped, even though ClubSync&rsquo;s data already resides in Canada.
                 </div>
@@ -236,7 +237,8 @@ export default function PrivacyPage() {
 
               <section className="legal-clause" id="p8">
                 <h3><span className="num">8</span>How long we keep your information</h3>
-                <p>We keep your account and activity data for as long as your account is active. If you graduate, leave the school, or ask us to delete your account, we&rsquo;ll remove your personal information within a reasonable time, except where a record needs to be kept for legitimate club/school record-keeping (for example, a school may need to retain verified service-hour totals as part of its own graduation records — that&rsquo;s the school&rsquo;s retention obligation, not ClubSync&rsquo;s).</p>
+                <p>We keep your account and activity data for as long as your account is active. You can delete your account and personal information yourself at any time from Settings, and it&rsquo;s removed right away — except where a record needs to be kept for legitimate club/school record-keeping (for example, a school may need to retain verified service-hour totals as part of its own graduation records — that&rsquo;s the school&rsquo;s retention obligation, not ClubSync&rsquo;s).</p>
+                <p>Graduating or leaving the school doesn&rsquo;t delete your account automatically today — that only happens when you (or a parent/guardian, for a minor) actually request it, the same as any other deletion request in <a href="#p9">Section 9</a>. Automatically archiving a graduated student&rsquo;s account is on our roadmap; until it ships, this policy describes what actually happens, not what&rsquo;s planned.</p>
               </section>
 
               <section className="legal-clause" id="p9">
@@ -273,7 +275,12 @@ export default function PrivacyPage() {
               </section>
 
               <section className="legal-clause" id="p14">
-                <h3><span className="num">14</span>Changes to this policy</h3>
+                <h3><span className="num">14</span>If something goes wrong</h3>
+                <p>If we discover a privacy or security incident affecting your information, we&rsquo;ll act on it without delay: contain and assess it as soon as we&rsquo;re aware, notify anyone affected (and their school, where applicable) as soon as reasonably possible once we understand what happened, and tell you plainly what occurred, what information was involved, and what we&rsquo;re doing about it. This isn&rsquo;t a hypothetical policy — it&rsquo;s the actual process we&rsquo;d follow, and it applies whether the incident is large or small.</p>
+              </section>
+
+              <section className="legal-clause" id="p15">
+                <h3><span className="num">15</span>Changes to this policy</h3>
                 <p>If this policy changes in a meaningful way, we&rsquo;ll update the &ldquo;Effective&rdquo; date at the top of this page and, for significant changes, notify users directly within the app.</p>
               </section>
             </div>
@@ -317,6 +324,7 @@ export default function PrivacyPage() {
               <section className="legal-clause" id="t5">
                 <h3><span className="num">5</span>Club and content responsibility</h3>
                 <p>If you&rsquo;re a club director, officer, or admin, you&rsquo;re responsible for what you post on behalf of your club — descriptions, announcements, and event details. ClubSync doesn&rsquo;t review content before it&rsquo;s posted; it can be removed after the fact if it violates these terms.</p>
+                <p>If you upload a photo or video, only do so with the parent or guardian permission your school requires for that student, and avoid images that include a student&rsquo;s full name, address, or phone number.</p>
               </section>
 
               <section className="legal-clause" id="t6">

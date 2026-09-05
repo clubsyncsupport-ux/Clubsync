@@ -45,9 +45,12 @@ export interface AuthProvider {
   signIn(input: SignInInput): Promise<AuthResult>;
   // Looks up an existing account by googleId, falls back to linking an
   // existing password account by matching email, or creates a brand-new
-  // account if neither exists. Always succeeds (no AuthResult error case)
-  // since Google has already verified the email by this point.
-  signInWithGoogle(profile: GoogleProfile): Promise<Extract<AuthResult, { ok: true }>>;
+  // account if neither exists. Logging into an existing account always
+  // succeeds — Google has already verified the email by this point — but
+  // creating a brand-new account requires `hasConsent`, mirroring the same
+  // "agree to the Privacy Policy/Terms" gate enforced server-side on the
+  // email/password signup path.
+  signInWithGoogle(profile: GoogleProfile, opts: { hasConsent: boolean }): Promise<AuthResult>;
   signOut(sessionToken: string): Promise<void>;
   getUserFromSessionToken(token: string): Promise<AuthSessionUser | null>;
   changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ ok: true } | { ok: false; error: string }>;

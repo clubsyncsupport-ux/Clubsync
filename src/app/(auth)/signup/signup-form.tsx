@@ -42,7 +42,7 @@ export function SignUpForm({ initialError }: { initialError?: string | null }) {
         </label>
 
         <a
-          href="/api/auth/google"
+          href="/api/auth/google?intent=signup"
           aria-disabled={!agreed}
           onClick={(e) => {
             if (!agreed) e.preventDefault();

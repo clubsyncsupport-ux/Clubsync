@@ -46,6 +46,7 @@ export function AttachmentsSection({ eventId, attachments }: { eventId: string; 
               {pending ? "Uploading…" : "Upload"}
             </button>
           </form>
+          <p className="text-xs text-text-muted">Only upload photos of students with their parent or guardian&rsquo;s permission.</p>
           {error && <p className="text-sm text-danger">{error}</p>}
         </CardContent>
       </Card>

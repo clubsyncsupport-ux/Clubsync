@@ -50,6 +50,9 @@ export function ClubSettingsForm({ club, takenColors }: { club: Club; takenColor
             helperText="Recommended: landscape / wide, around 1200×400px — not a square image."
             ariaLabel="Change club banner"
           />
+          <p className="text-xs text-text-muted">
+            Only upload photos of students with their parent or guardian&rsquo;s permission, and avoid images that show a student&rsquo;s full name, address, or phone number.
+          </p>
 
           <div>
             <Label htmlFor="name">Club name</Label>
