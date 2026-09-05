@@ -36,6 +36,11 @@ export default async function DiscoverPage({
   const membershipByClub = new Map<string, "ACTIVE" | "PENDING">(viewer.memberships.map((m) => [m.clubId, m.status as "ACTIVE" | "PENDING"]));
   for (const clubId of pendingClubIds) if (!membershipByClub.has(clubId)) membershipByClub.set(clubId, "PENDING");
 
+  // Clubs already joined float to the top — easiest way back to a club
+  // you're already in, without needing a separate destination for it.
+  const joinedClubs = clubs.filter((c) => membershipByClub.get(c.id) === "ACTIVE");
+  const otherClubs = clubs.filter((c) => membershipByClub.get(c.id) !== "ACTIVE");
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">
       <h1 className="text-2xl font-bold tracking-tight text-text-primary">Discover Clubs</h1>
@@ -70,11 +75,30 @@ export default async function DiscoverPage({
           description="Try a different search or check back soon — new clubs are added all the time."
         />
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {clubs.map((club) => (
-            <ClubCard key={club.id} club={club} membershipStatus={(membershipByClub.get(club.id) as "ACTIVE" | "PENDING") ?? "NONE"} />
-          ))}
-        </div>
+        <>
+          {joinedClubs.length > 0 && (
+            <div className="mt-6">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">My Clubs</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {joinedClubs.map((club) => (
+                  <ClubCard key={club.id} club={club} membershipStatus="ACTIVE" />
+                ))}
+              </div>
+            </div>
+          )}
+          {otherClubs.length > 0 && (
+            <div className="mt-6">
+              {joinedClubs.length > 0 && (
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-text-muted">Discover More</h2>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {otherClubs.map((club) => (
+                  <ClubCard key={club.id} club={club} membershipStatus={(membershipByClub.get(club.id) as "PENDING") ?? "NONE"} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

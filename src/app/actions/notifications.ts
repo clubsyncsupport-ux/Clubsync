@@ -40,3 +40,19 @@ export async function deleteNotificationAction(id: string) {
   await db.notification.deleteMany({ where: { id, userId: user.id } });
   revalidatePath("/", "layout");
 }
+
+// Polled client-side by NotificationToastListener so an announcement posted
+// while a student is already in the app surfaces as a toast, not something
+// they only discover by later opening the bell. `since` is the last time the
+// client checked, so this only ever returns genuinely new notifications —
+// never the pre-existing unread backlog from before the page loaded.
+export async function getNotificationsSinceAction(since: string) {
+  const user = await requireUser();
+  const sinceDate = new Date(since);
+  if (isNaN(sinceDate.getTime())) return [];
+  return db.notification.findMany({
+    where: { userId: user.id, createdAt: { gt: sinceDate } },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  });
+}

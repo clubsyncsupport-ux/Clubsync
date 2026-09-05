@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { EventCard } from "@/components/event-card";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { ProgressRing } from "@/components/ui/progress-ring";
-import { Compass, Calendar as CalendarIcon, Clock, Ticket, type LucideIcon } from "lucide-react";
+import { Compass, Calendar as CalendarIcon, Clock, Ticket, Users, type LucideIcon } from "lucide-react";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -99,7 +99,7 @@ export default async function HomePage() {
       )}
 
       <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Joined Clubs" value={clubCount} />
+        <StatTile label="Joined Clubs" value={clubCount} href="/my-clubs" />
         <StatTile label="Upcoming Events" value={upcomingEvents.length} />
         <StatTile label="Registered Events" value={registeredCount} />
       </div>
@@ -132,6 +132,7 @@ export default async function HomePage() {
       <div>
         <h2 className="mb-3 text-lg font-semibold text-text-primary">Quick Actions</h2>
         <div className="grid grid-cols-2 gap-3">
+          <QuickAction href="/my-clubs" icon={Users} label="My Clubs" />
           <QuickAction href="/discover" icon={Compass} label="Browse Clubs" />
           <QuickAction href="/calendar" icon={CalendarIcon} label="View Calendar" />
           <QuickAction href="/service-hours" icon={Clock} label="Service Hours" />
@@ -142,13 +143,21 @@ export default async function HomePage() {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <Card className="p-4">
+function StatTile({ label, value, href }: { label: string; value: number; href?: string }) {
+  const content = (
+    <>
       <p className="text-2xl font-bold tabular-nums text-text-primary">{value}</p>
       <p className="mt-0.5 text-xs text-text-secondary">{label}</p>
-    </Card>
+    </>
   );
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        <Card className="p-4 transition-colors hover:border-border-strong">{content}</Card>
+      </Link>
+    );
+  }
+  return <Card className="p-4">{content}</Card>;
 }
 
 function QuickAction({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {

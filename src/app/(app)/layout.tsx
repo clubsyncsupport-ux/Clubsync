@@ -3,6 +3,7 @@ import { getActiveProfile } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { generateEventReminders } from "@/lib/reminders";
 import { AppShell } from "@/components/nav/app-shell";
+import { NotificationToastListener } from "@/components/notification-toast-listener";
 import type { NavItem } from "@/components/nav/nav-links";
 
 const STUDENT_NAV: NavItem[] = [
@@ -36,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       unreadCount={unreadCount}
     >
       {children}
+      <NotificationToastListener />
     </AppShell>
   );
 }

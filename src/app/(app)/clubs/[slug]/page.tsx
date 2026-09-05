@@ -69,9 +69,13 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
       </div>
 
       <div className="mx-auto max-w-3xl px-4 pb-10">
-        <div className="-mt-6 flex items-end gap-4 sm:-mt-10">
+        <div className="flex items-end gap-4">
+          {/* Only the logo overlaps the banner — pulling the whole row up
+             (including the text) let the club name render on top of the
+             banner image itself once the name/category line ran past a
+             single short line. */}
           <div
-            className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-surface-0 text-2xl font-bold text-white shadow-md"
+            className="-mt-10 flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-surface-0 text-2xl font-bold text-white shadow-md"
             style={{ backgroundColor: club.color }}
           >
             {club.logoUrl ? (
