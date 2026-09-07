@@ -48,7 +48,14 @@ model User {
   // by schoolAdminOfId (distinct from schoolId, which is this person's own
   // student/staff school — a School Admin need not have a profile there at all).
   platformRole      String   @default("STUDENT")
-  // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED"
+  // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED" | "DELETED" — DELETED is
+  // set by a self-service account deletion that had verified service-hour
+  // records to preserve (see deleteMyAccountAction): passwordHash, googleId,
+  // and every session are cleared so the row can never be signed into again,
+  // but the row itself and its VERIFIED ServiceHourRecord rows survive as
+  // the school's copy of that record. A deletion with nothing to preserve
+  // still does a real db.user.delete() instead — DELETED only exists for
+  // the case that actually needs it.
   accountStatus     String   @default("ACTIVE")
   // Login rate-limiting: counts consecutive failed password attempts, reset
   // to 0 on a successful login. Crossing each tier in LOCKOUT_TIERS (see

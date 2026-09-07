@@ -20,6 +20,11 @@ export function DeleteAccountForm() {
           Permanently deletes your account, club memberships, event registrations, and logged service hours. This can&rsquo;t
           be undone. If you run a club, delete or transfer it first from that club&rsquo;s Settings page.
         </p>
+        <p className="mt-2 text-sm text-text-secondary">
+          If you have any <em>verified</em> service hours, your name and those specific hours are kept as your school&rsquo;s
+          record — everything else about your account (email, password, login access, profile) is removed immediately and
+          permanently, and you&rsquo;ll never be able to sign back into this account.
+        </p>
         {!confirming ? (
           <Button type="button" variant="danger" className="mt-4" onClick={() => setConfirming(true)}>
             Delete My Account…

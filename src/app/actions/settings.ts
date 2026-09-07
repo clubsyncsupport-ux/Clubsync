@@ -119,8 +119,54 @@ export async function deleteMyAccountAction(_prev: SettingsState, formData: Form
     };
   }
 
+  const hasVerifiedHours = (await db.serviceHourRecord.count({ where: { userId: user.id, status: "VERIFIED" } })) > 0;
+
   try {
-    await db.user.delete({ where: { id: user.id } });
+    if (!hasVerifiedHours) {
+      // The common case: nothing the school would need to keep, so a full,
+      // ordinary delete — everything tied to this account is gone.
+      await db.user.delete({ where: { id: user.id } });
+    } else {
+      // A school may need this person's verified service-hour record even
+      // after they delete their account (see Privacy Policy §8) — but "we
+      // kept the record" shouldn't mean "we kept the account." This closes
+      // every way back in (password, Google link, sessions, email) and
+      // removes everything else that isn't an official record, while
+      // leaving the verified hours — and the name that makes them
+      // meaningful to the school — attached to a account that can never be
+      // signed into again. Mirrors the existing MERGED accountStatus
+      // pattern: a User row can already outlive someone's ability to use it.
+      await db.$transaction([
+        db.session.deleteMany({ where: { userId: user.id } }),
+        db.clubMembership.deleteMany({ where: { userId: user.id } }),
+        db.memberGroupMembership.deleteMany({ where: { userId: user.id } }),
+        db.eventRegistration.deleteMany({ where: { userId: user.id } }),
+        db.eventInvite.deleteMany({ where: { userId: user.id } }),
+        db.notification.deleteMany({ where: { userId: user.id } }),
+        db.personalEvent.deleteMany({ where: { userId: user.id } }),
+        db.personalEventCategory.deleteMany({ where: { userId: user.id } }),
+        db.userAchievement.deleteMany({ where: { userId: user.id } }),
+        // Only VERIFIED records are the school's business — self-reported/
+        // pending/rejected ones carry no such retention reason and go with
+        // everything else.
+        db.serviceHourRecord.deleteMany({ where: { userId: user.id, status: { not: "VERIFIED" } } }),
+        db.user.update({
+          where: { id: user.id },
+          data: {
+            email: `deleted-${user.id}@clubsync.local`,
+            passwordHash: null,
+            googleId: null,
+            googleCalendarRefreshToken: null,
+            googleCalendarConnectedAt: null,
+            avatarUrl: null,
+            bio: null,
+            grade: null,
+            schoolId: null,
+            accountStatus: "DELETED",
+          },
+        }),
+      ]);
+    }
   } catch {
     return { error: "Something prevented deleting your account. Please contact support." };
   }
