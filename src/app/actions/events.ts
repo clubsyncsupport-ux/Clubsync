@@ -173,18 +173,28 @@ export type BulkRegisterResult = { eventId: string; startAt: Date } & RegisterRe
 // and resolves the matching role's real id separately for every event.
 export async function registerForRecurringSeriesAction(eventIds: string[], roleName?: string): Promise<BulkRegisterResult[]> {
   const user = await requireUser();
-  const results: BulkRegisterResult[] = [];
-  for (const eventId of eventIds) {
-    const event = await db.event.findUnique({ where: { id: eventId }, select: { startAt: true, roles: true } });
-    if (!event) continue;
-    const roleId = roleName ? event.roles.find((r) => r.name === roleName)?.id : undefined;
-    const result = await attemptRegisterForEvent(user.id, eventId, roleId);
-    results.push({ eventId, startAt: event.startAt, ...result });
-  }
+
+  // One batched lookup instead of a query per date, then each date's
+  // registration attempt runs concurrently — they're independent (each
+  // event has its own capacity/roster), so nothing here needs to wait its
+  // turn behind the others the way it did in a sequential for-loop.
+  const events = await db.event.findMany({ where: { id: { in: eventIds } }, select: { id: true, startAt: true, roles: true } });
+  const eventById = new Map(events.map((e) => [e.id, e]));
+
+  const results = await Promise.all(
+    eventIds.map(async (eventId) => {
+      const event = eventById.get(eventId);
+      if (!event) return null;
+      const roleId = roleName ? event.roles.find((r) => r.name === roleName)?.id : undefined;
+      const result = await attemptRegisterForEvent(user.id, eventId, roleId);
+      return { eventId, startAt: event.startAt, ...result };
+    })
+  );
+
   revalidatePath("/my-events");
   revalidatePath("/calendar");
   revalidatePath("/home");
-  return results;
+  return results.filter((r): r is BulkRegisterResult => r !== null);
 }
 
 export async function cancelRegistrationAction(eventId: string) {

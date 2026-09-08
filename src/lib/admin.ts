@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -6,13 +7,14 @@ import { db } from "@/lib/db";
 // Platform Administrator accounts are never created through public signup —
 // only an existing admin (or the seed script) can grant the role. The
 // /admin layout calls this first, so every /admin/* page is protected by
-// the time its own body runs.
-export async function requireAdmin() {
+// the time its own body runs. Wrapped in React.cache so the layout and the
+// page underneath it share one lookup per request instead of two.
+export const requireAdmin = cache(async () => {
   const authUser = await requireUser();
   const user = await db.user.findUniqueOrThrow({ where: { id: authUser.id } });
   if (user.platformRole !== "PLATFORM_ADMIN") redirect("/access-denied");
   return user;
-}
+});
 
 export async function logAudit(actorUserId: string, action: string, targetType: string, targetId: string, previousValue?: unknown, newValue?: unknown, reason?: string) {
   await db.auditLog.create({

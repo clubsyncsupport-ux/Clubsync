@@ -1,11 +1,14 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
 // Fetches the full DB record for the logged-in user, with the relations
 // nearly every page needs (school, active club memberships). Redirects to
-// onboarding if the account hasn't finished profile setup yet.
-export async function getViewer() {
+// onboarding if the account hasn't finished profile setup yet. Wrapped in
+// React.cache so a shared layout and the page underneath it both calling
+// this in the same request share one DB round trip instead of two.
+export const getViewer = cache(async () => {
   const authUser = await requireUser();
   const user = await db.user.findUniqueOrThrow({
     where: { id: authUser.id },
@@ -18,7 +21,7 @@ export async function getViewer() {
   if (user.accountStatus === "MERGED") redirect("/merged");
   if (!user.schoolId) redirect("/onboarding");
   return user;
-}
+});
 
 export type Viewer = Awaited<ReturnType<typeof getViewer>>;
 

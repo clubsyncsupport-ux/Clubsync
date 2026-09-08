@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authProvider } from "./index";
@@ -36,12 +37,15 @@ export async function getSessionToken(): Promise<string | null> {
   return jar.get(SESSION_COOKIE)?.value ?? null;
 }
 
-/** Redirects to /login if there's no authenticated user. */
-export async function requireUser(): Promise<AuthSessionUser> {
+/** Redirects to /login if there's no authenticated user. Wrapped in
+ * React.cache so every call within the same request/render (a shared layout
+ * plus the page underneath it, for example) reuses the first lookup instead
+ * of re-hitting the session/user tables for an answer already known. */
+export const requireUser = cache(async (): Promise<AuthSessionUser> => {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
-}
+});
 
 // The "active profile" is which lens the signed-in user is currently viewing
 // the app through: their own Student view, a Club Director view scoped to a

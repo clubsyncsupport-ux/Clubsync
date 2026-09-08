@@ -46,24 +46,40 @@ export async function createPersonalEventAction(_prev: ActionState, formData: Fo
   const duration = endAt.getTime() - startAt.getTime();
   const recurrenceUntil = recurrenceUntilRaw ? new Date(recurrenceUntilRaw) : null;
 
-  let parentId: string | null = null;
-  for (const occStart of occurrences) {
-    const occEnd = new Date(occStart.getTime() + duration);
-    const created: PersonalEvent = await db.personalEvent.create({
-      data: {
+  // The first occurrence has to exist before the rest can reference it as
+  // recurrenceParentId, but everything after that shares the exact same
+  // parentId — so only the first insert needs its own round trip; the
+  // remaining (up to 51) occurrences batch into one createMany.
+  const [firstStart, ...restStarts] = occurrences;
+  const created: PersonalEvent = await db.personalEvent.create({
+    data: {
+      userId: user.id,
+      title,
+      startAt: firstStart,
+      endAt: new Date(firstStart.getTime() + duration),
+      location,
+      description,
+      categoryId,
+      recurrence,
+      recurrenceParentId: null,
+      recurrenceUntil,
+    },
+  });
+  if (restStarts.length > 0) {
+    await db.personalEvent.createMany({
+      data: restStarts.map((occStart) => ({
         userId: user.id,
         title,
         startAt: occStart,
-        endAt: occEnd,
+        endAt: new Date(occStart.getTime() + duration),
         location,
         description,
         categoryId,
         recurrence,
-        recurrenceParentId: parentId,
+        recurrenceParentId: created.id,
         recurrenceUntil,
-      },
+      })),
     });
-    if (!parentId) parentId = created.id;
   }
 
   revalidatePath("/calendar");

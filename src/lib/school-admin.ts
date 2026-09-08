@@ -1,12 +1,15 @@
 import "server-only";
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
 // Loads a school and verifies the current user is its assigned School Admin
 // (or a Platform Admin, who has full power in every school). Every
-// /school-admin/[schoolId]/* page should call this first.
-export async function getSchoolAdminContext(schoolId: string) {
+// /school-admin/[schoolId]/* page should call this first. Wrapped in
+// React.cache so the shared school-admin layout and the page inside it share
+// one lookup per request instead of two.
+export const getSchoolAdminContext = cache(async (schoolId: string) => {
   const authUser = await requireUser();
   const [school, me] = await Promise.all([
     db.school.findUnique({ where: { id: schoolId } }),
@@ -21,7 +24,7 @@ export async function getSchoolAdminContext(schoolId: string) {
   if (!isAuthorized) notFound();
 
   return { school, user: authUser, isPlatformAdmin };
-}
+});
 
 // For actions/pages that start from a club (or another school-owned resource)
 // rather than a schoolId directly — loads the club, derives its schoolId, then

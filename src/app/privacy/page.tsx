@@ -366,7 +366,7 @@ export default function PrivacyPage() {
               <div className="legal-contact-card">
                 <dl>
                   <dt>Privacy &amp; general contact</dt>
-                  <dd>clubsyncsupport@gmail.com</dd>
+                  <dd>clubsyncsupport1@gmail.com</dd>
                   <dt>Response time</dt>
                   <dd>We aim to respond within a few business days</dd>
                 </dl>

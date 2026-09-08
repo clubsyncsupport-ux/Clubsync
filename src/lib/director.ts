@@ -1,11 +1,15 @@
 import "server-only";
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 
 // Loads a club and verifies the current user is its Director/Officer (or a
 // Platform Admin). Every /director/[clubId]/* page should call this first.
-export async function getDirectorContext(clubId: string) {
+// Wrapped in React.cache: the shared director layout and the page rendered
+// inside it both call this with the same clubId in the same request, so the
+// second call reuses the first instead of re-running the same three queries.
+export const getDirectorContext = cache(async (clubId: string) => {
   const authUser = await requireUser();
   const [club, membership, me] = await Promise.all([
     db.club.findUnique({ where: { id: clubId } }),
@@ -27,4 +31,4 @@ export async function getDirectorContext(clubId: string) {
   // Director-level power in every club — e.g. to step in and help a director
   // who's stuck or unreachable — not just Officer-level view access.
   return { club, user: authUser, isDirector: membership?.role === "DIRECTOR" || isPlatformAdmin || isSchoolAdminHere };
-}
+});

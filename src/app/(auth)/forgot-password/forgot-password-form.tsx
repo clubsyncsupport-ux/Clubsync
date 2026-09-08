@@ -37,7 +37,7 @@ export function ForgotPasswordForm() {
         )}
 
         <p className="mt-6 text-xs text-text-muted">
-          Email not arriving? A club director, your school&rsquo;s ClubSync admin, or ClubSync support (clubsyncsupport@gmail.com) can reset it for you directly.
+          Email not arriving? A club director, your school&rsquo;s ClubSync admin, or ClubSync support (clubsyncsupport1@gmail.com) can reset it for you directly.
         </p>
       </div>
     </div>

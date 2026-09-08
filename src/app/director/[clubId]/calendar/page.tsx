@@ -48,10 +48,20 @@ export default async function AllClubsCalendarPage({
     // Every active club at the school, not just ones with an event in this
     // window — so the legend lets you pre-hide a club before it ever posts anything.
     db.club.findMany({ where: { schoolId: club.schoolId, status: "ACTIVE" }, select: { id: true, name: true, color: true }, orderBy: { name: "asc" } }),
-    db.user.findUniqueOrThrow({ where: { id: user.id }, select: { googleCalendarRefreshToken: true } }),
+    db.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { googleCalendarRefreshToken: true, googleCalendarAccessToken: true, googleCalendarAccessTokenExpiresAt: true },
+    }),
   ]);
   const googleEvents = me.googleCalendarRefreshToken
-    ? await getGoogleCalendarEvents(user.id, me.googleCalendarRefreshToken, rangeStart, rangeEnd)
+    ? await getGoogleCalendarEvents(
+        user.id,
+        me.googleCalendarRefreshToken,
+        rangeStart,
+        rangeEnd,
+        me.googleCalendarAccessToken,
+        me.googleCalendarAccessTokenExpiresAt
+      )
     : [];
 
   // Directors get the full management view for their own club's events; for

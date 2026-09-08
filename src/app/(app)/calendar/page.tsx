@@ -76,7 +76,14 @@ export default async function CalendarPage({
     }),
     db.personalEventCategory.findMany({ where: { userId: viewer.id }, orderBy: { name: "asc" } }),
     viewer.googleCalendarRefreshToken
-      ? getGoogleCalendarEvents(viewer.id, viewer.googleCalendarRefreshToken, rangeStart, rangeEnd)
+      ? getGoogleCalendarEvents(
+          viewer.id,
+          viewer.googleCalendarRefreshToken,
+          rangeStart,
+          rangeEnd,
+          viewer.googleCalendarAccessToken,
+          viewer.googleCalendarAccessTokenExpiresAt
+        )
       : Promise.resolve([]),
   ]);
 

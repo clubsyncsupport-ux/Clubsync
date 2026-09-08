@@ -38,6 +38,12 @@ model User {
   // their personal events alongside club ones. ClubSync never writes to it.
   googleCalendarRefreshToken String?
   googleCalendarConnectedAt  DateTime?
+  // A refresh-token exchange gets a new short-lived access token (Google
+  // typically issues one valid for about an hour) — caching it here means a
+  // calendar page load reuses it until it's actually close to expiring,
+  // instead of exchanging the refresh token again on every single view.
+  googleCalendarAccessToken           String?
+  googleCalendarAccessTokenExpiresAt  DateTime?
   firstName         String
   lastName          String
   avatarUrl         String?
@@ -106,6 +112,10 @@ model User {
   // Comma-separated minutes-before values, e.g. "60,1440" = 1 hour and 1 day
   // before. See REMINDER_OFFSETS in src/lib/constants.ts for the allowed set.
   reminderOffsets   String   @default("1440")
+  // Last time generateEventReminders actually ran its (more expensive)
+  // registrations check for this person, so it can skip re-running on every
+  // single page nav — see src/lib/reminders.ts.
+  remindersCheckedAt DateTime?
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

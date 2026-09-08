@@ -58,7 +58,14 @@ export default async function TeacherCalendarPage({
     }),
   ]);
   const googleEvents = user.googleCalendarRefreshToken
-    ? await getGoogleCalendarEvents(user.id, user.googleCalendarRefreshToken, rangeStart, rangeEnd)
+    ? await getGoogleCalendarEvents(
+        user.id,
+        user.googleCalendarRefreshToken,
+        rangeStart,
+        rangeEnd,
+        user.googleCalendarAccessToken,
+        user.googleCalendarAccessTokenExpiresAt
+      )
     : [];
 
   // A teacher's own clubs get the full management view; every other club at

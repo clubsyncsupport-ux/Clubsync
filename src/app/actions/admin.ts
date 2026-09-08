@@ -301,11 +301,18 @@ export async function mergeClubsAction(sourceClubId: string, targetClubId: strin
 
   await db.$transaction(async (tx) => {
     const sourceMembers = await tx.clubMembership.findMany({ where: { clubId: sourceClubId } });
-    for (const m of sourceMembers) {
-      await tx.clubMembership.upsert({
-        where: { userId_clubId: { userId: m.userId, clubId: targetClubId } },
-        update: {},
-        create: { userId: m.userId, clubId: targetClubId, role: m.role === "DIRECTOR" ? "OFFICER" : m.role, status: m.status },
+    // A no-op upsert per member (one at a time) is exactly what createMany +
+    // skipDuplicates does in a single statement: insert everyone who isn't
+    // already in the target club, leave an existing membership untouched.
+    if (sourceMembers.length > 0) {
+      await tx.clubMembership.createMany({
+        data: sourceMembers.map((m) => ({
+          userId: m.userId,
+          clubId: targetClubId,
+          role: m.role === "DIRECTOR" ? "OFFICER" : m.role,
+          status: m.status,
+        })),
+        skipDuplicates: true,
       });
     }
     await tx.event.updateMany({ where: { clubId: sourceClubId }, data: { clubId: targetClubId } });
@@ -499,11 +506,12 @@ export async function mergeUserAccountsAction(targetUserId: string, sourceUserId
 
   await db.$transaction(async (tx) => {
     const sourceMemberships = await tx.clubMembership.findMany({ where: { userId: sourceUserId } });
-    for (const m of sourceMemberships) {
-      await tx.clubMembership.upsert({
-        where: { userId_clubId: { userId: targetUserId, clubId: m.clubId } },
-        update: {},
-        create: { userId: targetUserId, clubId: m.clubId, role: m.role, status: m.status },
+    // A no-op upsert per membership (one at a time) is exactly what
+    // createMany + skipDuplicates does in a single statement.
+    if (sourceMemberships.length > 0) {
+      await tx.clubMembership.createMany({
+        data: sourceMemberships.map((m) => ({ userId: targetUserId, clubId: m.clubId, role: m.role, status: m.status })),
+        skipDuplicates: true,
       });
     }
 
@@ -512,12 +520,19 @@ export async function mergeUserAccountsAction(targetUserId: string, sourceUserId
 
     // Event registrations can't duplicate (eventId, userId is unique) — if the
     // target already has one for a given event, leave the source's copy behind
-    // on the now-merged account rather than erroring the whole merge.
-    const sourceRegs = await tx.eventRegistration.findMany({ where: { userId: sourceUserId } });
-    for (const r of sourceRegs) {
-      const existing = await tx.eventRegistration.findUnique({ where: { eventId_userId: { eventId: r.eventId, userId: targetUserId } } });
-      if (!existing) {
-        await tx.eventRegistration.update({ where: { id: r.id }, data: { userId: targetUserId } });
+    // on the now-merged account rather than erroring the whole merge. Look up
+    // every conflict in one query instead of one findUnique per registration,
+    // then move everything that's clear in a single updateMany.
+    const sourceRegs = await tx.eventRegistration.findMany({ where: { userId: sourceUserId }, select: { id: true, eventId: true } });
+    if (sourceRegs.length > 0) {
+      const targetExisting = await tx.eventRegistration.findMany({
+        where: { userId: targetUserId, eventId: { in: sourceRegs.map((r) => r.eventId) } },
+        select: { eventId: true },
+      });
+      const targetEventIds = new Set(targetExisting.map((r) => r.eventId));
+      const regIdsToMove = sourceRegs.filter((r) => !targetEventIds.has(r.eventId)).map((r) => r.id);
+      if (regIdsToMove.length > 0) {
+        await tx.eventRegistration.updateMany({ where: { id: { in: regIdsToMove } }, data: { userId: targetUserId } });
       }
     }
 
