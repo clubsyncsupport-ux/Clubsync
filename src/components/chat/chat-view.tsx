@@ -22,6 +22,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
+import { Paperclip, X } from "lucide-react";
 
 export type ChatRole = "SPONSOR_TEACHER" | "SUPER_ADMIN" | "ADMIN" | "MEMBER" | "OVERSIGHT";
 
@@ -130,7 +131,7 @@ export function ChatView({
         )}
       </div>
 
-      <div className="flex min-h-[400px] flex-col rounded-2xl border border-border bg-surface-1">
+      <div className="flex h-[75vh] min-h-[420px] flex-col rounded-2xl border border-border bg-surface-1 md:max-h-[720px]">
         {!selected ? (
           <div className="flex flex-1 items-center justify-center p-8 text-sm text-text-muted">Pick a channel to view messages.</div>
         ) : (
@@ -247,9 +248,14 @@ function ChannelThread({ channelId, userId, isOversight, canPost }: { channelId:
 
   return (
     <>
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      {/* column-reverse (not a scrollIntoView effect) so the thread opens
+          already at the newest message and stays pinned there as new ones
+          arrive, the same way Instagram/Slack do it — the array itself
+          stays oldest-first everywhere else, only reversed here for
+          display. */}
+      <div className="flex flex-1 flex-col-reverse gap-3 overflow-y-auto p-4">
         {messages.length === 0 && <p className="text-sm text-text-muted">No messages yet.</p>}
-        {messages.map((m) => (
+        {[...messages].reverse().map((m) => (
           <MessageRow key={m.id} message={m} userId={userId} isOversight={isOversight} onReactionChange={applyReaction} />
         ))}
       </div>
@@ -478,6 +484,13 @@ function Composer({ channelId, onSent }: { channelId: string; onSent: () => void
   const [body, setBody] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function clearFile() {
+    setFileName(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   function submit(formData: FormData) {
     setError(null);
@@ -487,6 +500,7 @@ function Composer({ channelId, onSent }: { channelId: string; onSent: () => void
       if (res.error) setError(res.error);
       else {
         setBody("");
+        clearFile();
         onSent();
       }
     });
@@ -495,6 +509,15 @@ function Composer({ channelId, onSent }: { channelId: string; onSent: () => void
   return (
     <form action={submit} className="border-t border-border p-3">
       {error && <p className="mb-2 text-xs text-danger">{error}</p>}
+      {fileName && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs text-text-secondary">
+          <Paperclip className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+          <span className="min-w-0 flex-1 truncate">{fileName}</span>
+          <button type="button" onClick={clearFile} aria-label="Remove attachment" className="shrink-0 text-text-muted hover:text-danger">
+            <X className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <input
           value={body}
@@ -502,7 +525,26 @@ function Composer({ channelId, onSent }: { channelId: string; onSent: () => void
           placeholder="Write a message…"
           className="flex-1 rounded-xl border border-border bg-surface-0 px-3 py-2 text-sm outline-none focus:border-accent"
         />
-        <input type="file" name="attachment" accept="image/*,.pdf" className="w-28 text-xs" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          name="attachment"
+          accept="image/*,.pdf"
+          className="hidden"
+          onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach a file"
+          title="Attach a file"
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors",
+            fileName ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:bg-surface-2"
+          )}
+        >
+          <Paperclip className="h-4 w-4" strokeWidth={2} />
+        </button>
         <Button type="submit" size="sm" disabled={pending}>
           Send
         </Button>
