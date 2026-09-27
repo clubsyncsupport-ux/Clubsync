@@ -90,10 +90,10 @@ export async function addStudentToClubAction(clubId: string, userId: string) {
   revalidatePath(`/director/${clubId}/members/add`);
 }
 
-export async function promoteMemberAction(membershipId: string, clubId: string, role: "MEMBER" | "OFFICER") {
+export async function promoteMemberAction(membershipId: string, clubId: string, role: "MEMBER" | "OFFICER" | "SUPER_ADMIN") {
   const { isDirector } = await getDirectorContext(clubId);
-  // Only the Director can promote members to Admin or demote them — Admins
-  // can't create or remove other Admins.
+  // Only the Director can promote members to Admin/Super Admin or demote
+  // them — Admins can't create or remove other Admins or Super Admins.
   if (!isDirector) return;
   await db.clubMembership.update({ where: { id: membershipId }, data: { role } });
   revalidatePath(`/director/${clubId}/members`);
@@ -143,6 +143,7 @@ export async function updateClubSettingsAction(clubId: string, formData: FormDat
   const instagramUrl = String(formData.get("instagramUrl") ?? "").trim();
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
   const requiresApproval = formData.get("requiresApproval") === "on";
+  const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
 
   if (!name || !description) return { error: "Club name and description are required." };
 
@@ -171,6 +172,7 @@ export async function updateClubSettingsAction(clubId: string, formData: FormDat
       instagramUrl: instagramUrl || null,
       websiteUrl: websiteUrl || null,
       requiresApproval,
+      allowedGrades,
       ...(logoUrl ? { logoUrl } : {}),
       ...(bannerUrl ? { bannerUrl } : {}),
     },

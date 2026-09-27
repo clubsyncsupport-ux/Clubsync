@@ -35,6 +35,10 @@ async function attemptRegisterForEvent(userId: string, eventId: string, roleId?:
     if (!invited) return { ok: false, error: "This event is private." };
   }
 
+  if (event.approvalStatus !== "APPROVED") {
+    return { ok: false, error: "This event hasn't been approved yet." };
+  }
+
   const me = await db.user.findUniqueOrThrow({ where: { id: userId } });
 
   if (event.allowedGrades) {

@@ -4,6 +4,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { switchProfileAction } from "@/app/actions/profile";
 import { AdminNavLinks, AdminMobileNavLinks } from "@/app/admin/admin-nav-links";
 import type { NavIconName } from "@/components/nav/nav-icons";
+import { schoolAdminTierLabel } from "@/lib/constants";
 
 export default async function SchoolAdminLayout({
   children,
@@ -13,11 +14,17 @@ export default async function SchoolAdminLayout({
   params: Promise<{ schoolId: string }>;
 }) {
   const { schoolId } = await params;
-  const { school, user, isPlatformAdmin } = await getSchoolAdminContext(schoolId);
-  const pendingStaffCount = await db.user.count({ where: { accountKind: "STAFF", staffApprovalStatus: "PENDING", schoolId } });
+  const { school, user, isPlatformAdmin, platformRole } = await getSchoolAdminContext(schoolId);
+  const [pendingStaffCount, pendingEventCount, pendingRegistrationCount] = await Promise.all([
+    db.user.count({ where: { accountKind: "STAFF", staffApprovalStatus: "PENDING", schoolId } }),
+    db.event.count({ where: { club: { schoolId }, approvalStatus: { in: ["PENDING_SPONSOR", "PENDING_ADMIN"] } } }),
+    db.clubRegistration.count({ where: { club: { schoolId }, status: { in: ["PENDING_SPONSOR", "PENDING_ADMIN"] } } }),
+  ]);
+  const pendingApprovalCount = pendingEventCount + pendingRegistrationCount;
 
   const NAV: { href: string; label: string; icon: NavIconName; badge?: boolean }[] = [
     { href: `/school-admin/${schoolId}`, label: "Dashboard", icon: "LayoutDashboard" },
+    { href: `/school-admin/${schoolId}/approvals`, label: "Approvals", icon: "ClipboardCheck", badge: pendingApprovalCount > 0 },
     { href: `/school-admin/${schoolId}/students`, label: "Students", icon: "GraduationCap" },
     { href: `/school-admin/${schoolId}/teachers`, label: "Teachers", icon: "User", badge: pendingStaffCount > 0 },
     { href: `/school-admin/${schoolId}/clubs`, label: "Clubs", icon: "Users" },
@@ -29,7 +36,7 @@ export default async function SchoolAdminLayout({
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface-1 p-4 md:sticky md:top-0 md:flex md:h-dvh">
         <div className="min-w-0 px-2 py-3">
           <p className="truncate text-lg font-bold tracking-tight text-text-primary">{school.name}</p>
-          <p className="text-[11px] text-text-muted">School Admin</p>
+          <p className="text-[11px] text-text-muted">{schoolAdminTierLabel(platformRole)}</p>
         </div>
         <div className="mt-4 flex-1">
           <AdminNavLinks items={NAV} />

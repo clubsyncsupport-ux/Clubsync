@@ -28,6 +28,10 @@ export default async function DirectorLayout({
     { href: `/director/${clubId}/calendar`, label: "Calendar", icon: "CalendarDays" },
     { href: `/director/${clubId}/members`, label: "Members", icon: "Users", badge: pendingRequestCount > 0 },
     { href: `/director/${clubId}/announcements`, label: "News", icon: "Megaphone" },
+    { href: `/director/${clubId}/positions`, label: "Positions", icon: "ClipboardCheck" },
+    { href: `/director/${clubId}/chat`, label: "Chat", icon: "MessageCircle" },
+    { href: `/director/${clubId}/contacts`, label: "Contacts", icon: "Phone" },
+    { href: `/director/${clubId}/registration`, label: "Registration", icon: "ClipboardCheck" },
     { href: `/director/${clubId}/settings`, label: "Settings", icon: "Settings" },
   ];
 

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { isSchoolAdminTier } from "@/lib/constants";
 
 // Loads a club and verifies the current user is its Director/Officer (or a
 // Platform Admin). Every /director/[clubId]/* page should call this first.
@@ -23,8 +24,11 @@ export const getDirectorContext = cache(async (clubId: string) => {
   // A School Admin gets full Director power in every club at their own
   // school — same "step in and help" precedent as Platform Admin below, just
   // scoped to the one school they administer.
-  const isSchoolAdminHere = me.platformRole === "SCHOOL_ADMIN" && me.schoolAdminOfId === club.schoolId;
-  const isAuthorized = (membership && (membership.role === "DIRECTOR" || membership.role === "OFFICER")) || isPlatformAdmin || isSchoolAdminHere;
+  const isSchoolAdminHere = isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId === club.schoolId;
+  const isAuthorized =
+    (membership && (membership.role === "DIRECTOR" || membership.role === "OFFICER" || membership.role === "SUPER_ADMIN")) ||
+    isPlatformAdmin ||
+    isSchoolAdminHere;
   if (!isAuthorized) notFound();
 
   // Platform Admins (and, at their own school, School Admins) get full

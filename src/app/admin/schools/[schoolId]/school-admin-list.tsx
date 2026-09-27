@@ -3,8 +3,9 @@
 import { useTransition } from "react";
 import { removeSchoolAdminAction } from "@/app/actions/admin";
 import { Avatar } from "@/components/ui/avatar";
+import { schoolAdminTierLabel } from "@/lib/constants";
 
-type SchoolAdmin = { id: string; firstName: string; lastName: string; email: string; avatarUrl: string | null };
+type SchoolAdmin = { id: string; firstName: string; lastName: string; email: string; avatarUrl: string | null; platformRole: string };
 
 export function SchoolAdminList({ admins }: { admins: SchoolAdmin[] }) {
   const [pending, startTransition] = useTransition();
@@ -21,6 +22,7 @@ export function SchoolAdminList({ admins }: { admins: SchoolAdmin[] }) {
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-text-primary">
               {a.firstName} {a.lastName}
+              <span className="ml-2 text-xs font-normal text-text-muted">{schoolAdminTierLabel(a.platformRole)}</span>
             </p>
             <p className="truncate text-xs text-text-muted">{a.email}</p>
           </div>

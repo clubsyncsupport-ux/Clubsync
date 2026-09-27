@@ -32,12 +32,12 @@ export default async function DirectorMembersPage({
           ? { user: { OR: [{ firstName: { contains: q } }, { lastName: { contains: q } }, { email: { contains: q } }] } }
           : {}),
       },
-      include: { user: true },
+      include: { user: { select: { id: true, firstName: true, lastName: true, avatarUrl: true, grade: true, email: true } } },
       orderBy: [{ status: "asc" }, { role: "asc" }, { joinedAt: "asc" }],
     }),
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
-      include: { user: true },
+      include: { user: { select: { firstName: true, lastName: true } } },
       orderBy: { user: { firstName: "asc" } },
     }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
@@ -54,7 +54,7 @@ export default async function DirectorMembersPage({
 
   const pending = memberships.filter((m) => m.status === "PENDING");
   const active = memberships.filter((m) => m.status === "ACTIVE");
-  const admins = active.filter((m) => m.role === "DIRECTOR" || m.role === "OFFICER");
+  const admins = active.filter((m) => m.role === "DIRECTOR" || m.role === "OFFICER" || m.role === "SUPER_ADMIN");
   const regularMembers = active.filter((m) => m.role === "MEMBER");
 
   return (

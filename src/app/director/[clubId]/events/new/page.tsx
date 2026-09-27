@@ -18,7 +18,7 @@ export default async function NewEventPage({
   const { club } = await getDirectorContext(clubId);
   const { copyFrom } = await searchParams;
 
-  const [members, sourceEvent, school, groups] = await Promise.all([
+  const [members, sourceEvent, school, groups, contacts] = await Promise.all([
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
       include: { user: true },
@@ -27,6 +27,9 @@ export default async function NewEventPage({
     copyFrom ? db.event.findUnique({ where: { id: copyFrom } }) : null,
     db.school.findUniqueOrThrow({ where: { id: club.schoolId } }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
+    // Names only, deliberately — phone numbers are revealed on demand via
+    // revealClubContactPhoneAction, never shipped into this page's props.
+    db.clubContact.findMany({ where: { clubId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const gradeLevels = schoolGradeLevels(school);
 
@@ -64,6 +67,7 @@ export default async function NewEventPage({
         members={members.map((m) => ({ id: m.user.id, name: `${m.user.firstName} ${m.user.lastName}` }))}
         groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
         gradeLevels={gradeLevels}
+        contacts={contacts}
         prefill={prefill}
       />
     </div>

@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { EventCard } from "@/components/event-card";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { ProgressRing } from "@/components/ui/progress-ring";
+import { BellScheduleCard } from "@/components/bell-schedule-card";
 import { Compass, Calendar as CalendarIcon, Clock, Ticket, Users, type LucideIcon } from "lucide-react";
 
 export const metadata: Metadata = { title: "Home" };
@@ -26,6 +27,7 @@ export default async function HomePage() {
       where: {
         status: "SCHEDULED",
         startAt: { gte: now },
+        approvalStatus: "APPROVED",
         club: { id: { in: clubIds } },
         OR: [{ visibility: "PUBLIC" }, { visibility: "PRIVATE", invites: { some: { userId: viewer.id } } }],
       },
@@ -37,6 +39,7 @@ export default async function HomePage() {
       where: {
         status: "SCHEDULED",
         startAt: { gte: now, lte: todayEnd },
+        approvalStatus: "APPROVED",
         club: { id: { in: clubIds } },
       },
     }),
@@ -58,6 +61,8 @@ export default async function HomePage() {
           {todayCount > 0 ? `You have ${todayCount} event${todayCount === 1 ? "" : "s"} today.` : "Nothing on your calendar today — enjoy the break."}
         </p>
       </div>
+
+      {viewer.schoolId && <BellScheduleCard schoolId={viewer.schoolId} />}
 
       <Card>
         <CardContent className="flex flex-col items-center p-6">

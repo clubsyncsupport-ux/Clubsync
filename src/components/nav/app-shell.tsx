@@ -21,7 +21,7 @@ export function AppShell({
   eyebrow?: string;
   user: { firstName: string; lastName: string; avatarUrl: string | null };
   directorClubs: { id: string; name: string; color: string }[];
-  schoolAdminOf?: { id: string; name: string } | null;
+  schoolAdminOf?: { id: string; name: string; roleLabel: string } | null;
   isAdmin: boolean;
   /** STAFF accounts (club directors who signed up without a student profile)
    * don't get a "Student" row in the switcher. */

@@ -14,6 +14,9 @@ import {
   User,
   Shield,
   GraduationCap,
+  Phone,
+  MessageCircle,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +41,9 @@ export const NAV_ICONS = {
   User,
   Shield,
   GraduationCap,
+  Phone,
+  MessageCircle,
+  ClipboardCheck,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

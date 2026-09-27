@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { createEventAction } from "@/app/actions/director-events";
+import { revealClubContactPhoneAction } from "@/app/actions/club-contacts";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select, FieldError } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileUploadButton } from "@/components/ui/file-upload-button";
-import { EVENT_CATEGORIES } from "@/lib/constants";
+import { EVENT_CATEGORIES, AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
+import { schoolDaysBetween } from "@/lib/school-days";
 
 export type EventPrefill = {
   title: string;
@@ -30,6 +32,7 @@ export function CreateEventForm({
   members,
   groups = [],
   gradeLevels,
+  contacts = [],
   prefill,
 }: {
   clubId: string;
@@ -40,6 +43,9 @@ export function CreateEventForm({
   /** This club's school's configured grade levels — what the "allowed
    * grades" picker offers, in place of the global default list. */
   gradeLevels: string[];
+  /** Names only, deliberately — phone numbers are never fetched for this
+   * page. See revealClubContactPhoneAction for the on-demand reveal. */
+  contacts?: { id: string; name: string }[];
   /** Pre-fills the form from an existing event (via "Copy Event"). Date/time,
    * recurrence, invite/assigned lists, and attachments are deliberately never
    * copied — those are per-instance, not part of the event "template". */
@@ -57,6 +63,23 @@ export function CreateEventForm({
   const [roleInput, setRoleInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [category, setCategory] = useState(prefill?.category ?? "Meeting");
+  const [eventDate, setEventDate] = useState("");
+  const [isFundraiser, setIsFundraiser] = useState(false);
+  const [contactId, setContactId] = useState("");
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
+  const [contactPhonePending, startContactPhoneTransition] = useTransition();
+
+  const needsProposal = !(AUTO_APPROVED_EVENT_CATEGORIES as readonly string[]).includes(category);
+  const shortNotice = eventDate ? schoolDaysBetween(new Date(), new Date(`${eventDate}T00:00:00`)) < 10 : false;
+
+  function revealContactPhone() {
+    if (!contactId) return;
+    startContactPhoneTransition(async () => {
+      const res = await revealClubContactPhoneAction(contactId);
+      setContactPhone(res.phone ?? res.error ?? null);
+    });
+  }
 
   function toggleInvite(id: string) {
     setInvited((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
@@ -165,14 +188,29 @@ export function CreateEventForm({
           </div>
           <div>
             <Label htmlFor="category">Category</Label>
-            <Select id="category" name="category" defaultValue={prefill?.category ?? "Meeting"}>
+            <Select id="category" name="category" value={category} onChange={(e) => setCategory(e.target.value)}>
               {EVENT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </Select>
+            <p className="mt-1.5 text-xs text-text-muted">
+              {needsProposal
+                ? "This needs Sponsor Teacher and administrator approval before it's visible to students."
+                : "Routine meetings don't need approval."}
+            </p>
           </div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+            <input type="checkbox" name="isFundraiser" checked={isFundraiser} onChange={(e) => setIsFundraiser(e.target.checked)} className="h-4 w-4 accent-accent" />
+            This event includes fundraising
+          </label>
+          {isFundraiser && (
+            <div className="pl-6">
+              <Label htmlFor="fundraisingDetails">Fundraising details</Label>
+              <Textarea id="fundraisingDetails" name="fundraisingDetails" rows={2} placeholder="What's being raised, and for what?" />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -181,7 +219,12 @@ export function CreateEventForm({
           <p className="text-sm font-semibold text-text-primary">Schedule</p>
           <div>
             <Label htmlFor="date">Date</Label>
-            <Input id="date" name="date" type="date" required />
+            <Input id="date" name="date" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
+            {needsProposal && shortNotice && (
+              <p className="mt-1.5 text-xs text-warning">
+                Heads up: less than 10 school days&rsquo; notice — consider giving your administrator more lead time.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -240,6 +283,62 @@ export function CreateEventForm({
           </div>
         </CardContent>
       </Card>
+
+      {needsProposal && (
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <p className="text-sm font-semibold text-text-primary">Proposal Details</p>
+            <p className="text-xs text-text-muted">Goes to your Sponsor Teacher, then the school administrator, for approval.</p>
+            <div>
+              <Label htmlFor="purpose">Purpose</Label>
+              <Textarea id="purpose" name="purpose" rows={2} placeholder="Why is this event happening?" />
+            </div>
+            <div>
+              <Label htmlFor="audience">Audience</Label>
+              <Input id="audience" name="audience" placeholder="Who is this for?" />
+            </div>
+            <div>
+              <Label htmlFor="promotionPlan">Promotion plan</Label>
+              <Textarea id="promotionPlan" name="promotionPlan" rows={2} placeholder="Posters, social media, announcements…" />
+            </div>
+            {contacts.length > 0 && (
+              <div>
+                <Label htmlFor="contactId">Student contact (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    id="contactId"
+                    name="contactId"
+                    value={contactId}
+                    onChange={(e) => {
+                      setContactId(e.target.value);
+                      setContactPhone(null);
+                    }}
+                    className="flex-1"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {contactId && (
+                    <Button type="button" variant="secondary" size="sm" disabled={contactPhonePending} onClick={revealContactPhone}>
+                      {contactPhonePending ? "…" : "Show phone"}
+                    </Button>
+                  )}
+                </div>
+                {contactPhone && <p className="mt-1.5 text-xs text-text-secondary">{contactPhone}</p>}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="internalNotes">Resources / logistics</Label>
+              <Textarea id="internalNotes" name="internalNotes" rows={2} placeholder="What's needed to make this happen?" />
+              <p className="mt-1.5 text-xs text-text-muted">Visible to school admins only — never shown on the public event page.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="space-y-4 p-5">
@@ -511,7 +610,7 @@ export function CreateEventForm({
       <FieldError>{error}</FieldError>
 
       <Button type="submit" size="lg" className="w-full" disabled={pending}>
-        {pending ? "Creating…" : "Create Event"}
+        {pending ? "Submitting…" : needsProposal ? "Submit for Approval" : "Create Event"}
       </Button>
     </form>
   );

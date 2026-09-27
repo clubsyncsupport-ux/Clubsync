@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { isSchoolAdminTier } from "@/lib/constants";
 
 // Fetches the full DB record for the logged-in user, with the relations
 // nearly every page needs (school, active club memberships). Redirects to
@@ -55,10 +56,11 @@ export function requireStudentViewer(viewer: Viewer) {
 export async function resolveLandingPath(userId: string): Promise<string> {
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) return "/welcome";
-  // A School Admin account with no personal student/staff profile has no
-  // onboarding to complete and no student app to land in — send them
-  // straight to the school they administer instead of the onboarding trap.
-  if (user.platformRole === "SCHOOL_ADMIN" && user.schoolAdminOfId && !user.schoolId) return `/school-admin/${user.schoolAdminOfId}`;
+  // A School Admin (or Principal/Vice Principal, same shape) account with no
+  // personal student/staff profile has no onboarding to complete and no
+  // student app to land in — send them straight to the school they
+  // administer instead of the onboarding trap.
+  if (isSchoolAdminTier(user.platformRole) && user.schoolAdminOfId && !user.schoolId) return `/school-admin/${user.schoolAdminOfId}`;
   if (!user.schoolId) return "/onboarding";
   if (user.accountKind === "STAFF") return "/teacher";
   return "/home";

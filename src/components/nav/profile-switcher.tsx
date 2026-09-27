@@ -12,7 +12,7 @@ import type { ActiveProfile } from "@/lib/auth/session";
 import { User, Wrench, Shield, School, Plus, Settings, LogOut, LayoutDashboard, type LucideIcon } from "lucide-react";
 
 type DirectorClub = { id: string; name: string; color: string };
-type SchoolAdminOf = { id: string; name: string };
+type SchoolAdminOf = { id: string; name: string; roleLabel: string };
 
 type ProfileSwitcherProps = {
   firstName: string;
@@ -88,7 +88,7 @@ function ProfileSwitcherMenu({
         ? "Platform Admin"
         : active.kind === "school-admin"
           ? schoolAdminOf?.name
-            ? `${schoolAdminOf.name} Admin`
+            ? `${schoolAdminOf.name} ${schoolAdminOf.roleLabel}`
             : "School Admin"
           : (directorClubs.find((c) => c.id === active.clubId)?.name ?? "Teacher");
 
@@ -159,7 +159,7 @@ function ProfileSwitcherMenu({
             {schoolAdminOf && (
               <ProfileRow
                 icon={School}
-                label={`${schoolAdminOf.name} Admin`}
+                label={`${schoolAdminOf.name} ${schoolAdminOf.roleLabel}`}
                 selected={active.kind === "school-admin" && active.schoolId === schoolAdminOf.id}
                 onClick={() => switchTo({ kind: "school-admin", schoolId: schoolAdminOf.id })}
               />

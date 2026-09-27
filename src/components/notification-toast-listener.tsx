@@ -13,6 +13,11 @@ const TYPE_ICON: Record<string, string> = {
   SERVICE_HOURS: "⏱",
   ACHIEVEMENT: "🏅",
   PLATFORM: "🛠",
+  CHAT_MESSAGE: "💬",
+  EVENT_PROPOSAL: "📝",
+  CLUB_REGISTRATION: "📋",
+  CLUB_SUPERVISOR_REQUEST: "🧑‍🏫",
+  POSITION_APPLICATION: "🗳️",
 };
 
 const POLL_MS = 20_000;

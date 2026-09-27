@@ -11,6 +11,7 @@ import { BackButton } from "@/components/ui/back-button";
 import { UserActions } from "./user-actions";
 import { MergeUserSection } from "@/components/admin/merge-user-section";
 import { ServiceHoursManager } from "@/components/admin/service-hours-manager";
+import { isSchoolAdminTier, schoolAdminTierLabel } from "@/lib/constants";
 
 export async function generateMetadata({ params }: { params: Promise<{ userId: string }> }): Promise<Metadata> {
   const { userId } = await params;
@@ -46,6 +47,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
           <div className="mt-2 flex gap-2">
             <Badge tone={user.accountStatus === "SUSPENDED" ? "danger" : "success"}>{user.accountStatus}</Badge>
             {user.platformRole === "PLATFORM_ADMIN" && <Badge tone="accent">Platform Admin</Badge>}
+            {isSchoolAdminTier(user.platformRole) && <Badge tone="accent">{schoolAdminTierLabel(user.platformRole)}</Badge>}
           </div>
         </div>
       </div>

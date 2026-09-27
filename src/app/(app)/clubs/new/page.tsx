@@ -4,6 +4,7 @@ import { getTakenColors } from "@/lib/data/club-colors";
 import { db } from "@/lib/db";
 import { BackButton } from "@/components/ui/back-button";
 import { CreateClubForm } from "./create-club-form";
+import { schoolGradeLevels } from "@/lib/grades";
 
 export const metadata: Metadata = { title: "Create a Club" };
 
@@ -30,7 +31,7 @@ export default async function NewClubPage() {
           ? "Pick a teacher to supervise it — your club goes live once they approve."
           : "No approval needed — you'll be the club owner immediately."}
       </p>
-      <CreateClubForm takenColors={takenColors} teachers={teachers} />
+      <CreateClubForm takenColors={takenColors} teachers={teachers} gradeLevels={viewer.school ? schoolGradeLevels(viewer.school) : []} />
     </div>
   );
 }

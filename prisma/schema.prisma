@@ -49,10 +49,14 @@ model User {
   avatarUrl         String?
   bio               String?
 
-  // platformRole: "STUDENT" | "SCHOOL_ADMIN" | "PLATFORM_ADMIN" — separate from
-  // club-level roles below. SCHOOL_ADMIN manages exactly one school, pointed to
-  // by schoolAdminOfId (distinct from schoolId, which is this person's own
-  // student/staff school — a School Admin need not have a profile there at all).
+  // platformRole: "STUDENT" | "SCHOOL_ADMIN" | "PRINCIPAL" | "VICE_PRINCIPAL" |
+  // "PLATFORM_ADMIN" — separate from club-level roles below. SCHOOL_ADMIN,
+  // PRINCIPAL, and VICE_PRINCIPAL all get identical "school admin"-shaped
+  // access to exactly one school, pointed to by schoolAdminOfId (distinct
+  // from schoolId, which is this person's own student/staff school — none of
+  // these three need a profile there at all); they're separate values only so
+  // approval routing can notify/label Principal/Vice Principal specifically
+  // (see isSchoolAdminTier / canActionApprovals in src/lib/constants.ts).
   platformRole      String   @default("STUDENT")
   // accountStatus: "ACTIVE" | "SUSPENDED" | "MERGED" | "DELETED" — DELETED is
   // set by a self-service account deletion that had verified service-hour
@@ -136,6 +140,20 @@ model User {
   createdEvents       Event[]              @relation("EventCreatedBy")
   personalEvents      PersonalEvent[]
   personalEventCategories PersonalEventCategory[]
+
+  sponsorApprovedEvents Event[] @relation("EventSponsorApprovedBy")
+  adminApprovedEvents   Event[] @relation("EventAdminApprovedBy")
+  submittedClubRegistrations       ClubRegistration[] @relation("ClubRegistrationSubmittedBy")
+  sponsorApprovedClubRegistrations ClubRegistration[] @relation("ClubRegistrationSponsorApprovedBy")
+  adminApprovedClubRegistrations   ClubRegistration[] @relation("ClubRegistrationAdminApprovedBy")
+
+  createdChannels     Channel[]            @relation("ChannelCreatedBy")
+  channelMemberships  ChannelMembership[]
+  sentChatMessages    ChatMessage[]        @relation("ChatMessageSender")
+  chatMessageReactions ChatMessageReaction[]
+
+  createdPositions     ClubPosition[]         @relation("ClubPositionCreatedBy")
+  positionApplications PositionApplication[]
 }
 
 model Session {
@@ -172,6 +190,28 @@ model School {
   users        User[]
   clubs        Club[]
   schoolAdmins User[] @relation("SchoolAdminOf")
+  calendarEvents SchoolCalendarEvent[]
+}
+
+// School-published events (Pro-D days, Collaboration Days, parent-teacher
+// conferences, assemblies, cultural observances, etc.) imported wholesale
+// from the school's own public calendar feed — see
+// prisma/import-school-calendar.ts. Shown on the student calendar view
+// alongside club events, distinctly styled; also what the bell-schedule
+// widget (src/lib/bell-schedule.ts) reads to know which day-type applies on
+// a given date (Collaboration Day / Pro-D / a rotation code like "ABCD").
+model SchoolCalendarEvent {
+  id       String   @id @default(cuid())
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  date     DateTime
+  endDate  DateTime?
+  title    String
+  // category: "SCHEDULE" (a day-type/rotation label like "ABCD") | "COLLABORATION_DAY" |
+  // "PRO_D" | "SCHOOL_CLOSED" | "PARENT_TEACHER" | "OBSERVANCE" | "OTHER"
+  category String
+
+  @@index([schoolId, date])
 }
 
 // ---------- Clubs ----------
@@ -195,6 +235,11 @@ model Club {
   contactEmail     String?
   instagramUrl     String?
   websiteUrl       String?
+
+  // Comma-separated grade values (same shape as Event.allowedGrades) —
+  // null/empty means open to every grade. Only gates joining; the club stays
+  // visible to everyone in Discover regardless.
+  allowedGrades    String?
 
   requiresApproval Boolean  @default(false)
 
@@ -224,6 +269,125 @@ model Club {
   announcements Announcement[]
   serviceHours  ServiceHourRecord[]
   memberGroups  MemberGroup[]
+  contacts      ClubContact[]
+  registrations ClubRegistration[]
+  channels      Channel[]
+  positions     ClubPosition[]
+}
+
+// ---------- Positions (Apply, distinct from Register) ----------
+// A club-defined role (e.g. "Vice President") with its own application
+// questions — separate from EventRegistration, which is "I'm coming to this
+// event," not "consider me for this role." Free-text answers (word-limited)
+// plus, if the position allows it, one uploaded file.
+
+model ClubPosition {
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  allowFileUpload Boolean @default(false)
+  // status: "OPEN" | "CLOSED" — closing a position stops new applications
+  // without deleting the ones already submitted.
+  status      String   @default("OPEN")
+  createdById String
+  createdBy   User     @relation("ClubPositionCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  questions    PositionQuestion[]
+  applications PositionApplication[]
+
+  @@unique([clubId, title])
+}
+
+model PositionQuestion {
+  id         String       @id @default(cuid())
+  positionId String
+  position   ClubPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  prompt     String
+  wordLimit  Int          @default(200)
+  order      Int          @default(0)
+
+  answers PositionAnswer[]
+}
+
+model PositionApplication {
+  id          String       @id @default(cuid())
+  positionId  String
+  position    ClubPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileUrl     String?
+  // status: "PENDING" | "ACCEPTED" | "REJECTED"
+  status      String       @default("PENDING")
+  submittedAt DateTime     @default(now())
+  reviewedAt  DateTime?
+
+  answers PositionAnswer[]
+
+  @@unique([positionId, userId])
+}
+
+model PositionAnswer {
+  id            String               @id @default(cuid())
+  applicationId String
+  application   PositionApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      PositionQuestion     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  body          String
+
+  @@unique([applicationId, questionId])
+}
+
+// A saved student-contact phone number for a club, used on the event
+// proposal form. Full list (including phone) is visible only to the club's
+// Director/Sponsor Teacher; anyone else filling out a proposal sees contact
+// names only and can reveal one selected contact's number on demand — see
+// src/app/actions/club-contacts.ts.
+model ClubContact {
+  id        String   @id @default(cuid())
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String
+  createdAt DateTime @default(now())
+
+  events Event[]
+}
+
+// One row per club per school year — the digitized, resubmitted-annually
+// club registration form (sponsor confirmation, meeting details, fundraising
+// guidelines). Carries the same 2-stage Sponsor Teacher → Administrator
+// approval chain as Event proposals (see src/lib/approvals.ts).
+model ClubRegistration {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  // e.g. "2026-2027" — see schoolYearFor() in src/lib/school-year.ts.
+  schoolYear String
+
+  description           String
+  meetingSchedule        String?
+  meetingLocation        String?
+  fundraisingGuidelines  String?
+
+  // status: "PENDING_SPONSOR" | "PENDING_ADMIN" | "APPROVED" | "REJECTED"
+  status              String    @default("PENDING_SPONSOR")
+  submittedById       String
+  submittedBy         User      @relation("ClubRegistrationSubmittedBy", fields: [submittedById], references: [id])
+  sponsorApprovedById String?
+  sponsorApprovedBy   User?     @relation("ClubRegistrationSponsorApprovedBy", fields: [sponsorApprovedById], references: [id])
+  sponsorApprovedAt   DateTime?
+  adminApprovedById   String?
+  adminApprovedBy     User?     @relation("ClubRegistrationAdminApprovedBy", fields: [adminApprovedById], references: [id])
+  adminApprovedAt     DateTime?
+  rejectionReason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clubId, schoolYear])
 }
 
 // A director-defined tag like "Executive Team" — lets a director bulk-select
@@ -260,7 +424,11 @@ model ClubMembership {
   clubId    String
   club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
-  // role: "MEMBER" | "OFFICER" | "DIRECTOR"
+  // role: "MEMBER" | "OFFICER" | "SUPER_ADMIN" | "DIRECTOR" — OFFICER displays
+  // as "Admin" in the UI, SUPER_ADMIN as "Super Admin" (a trusted
+  // student-leader tier strictly above Officer, added for club chat — see
+  // src/lib/chat.ts), DIRECTOR as "Director"/"Teacher"/"Sponsor Teacher"
+  // depending on context.
   role      String   @default("MEMBER")
   // status: "ACTIVE" | "PENDING"
   status    String   @default("ACTIVE")
@@ -268,6 +436,94 @@ model ClubMembership {
   joinedAt  DateTime @default(now())
 
   @@unique([userId, clubId])
+}
+
+// ---------- Club Chat ----------
+// A single Channel model covers both topic channels and DMs — a 1:1 or a
+// Super-Admin group chat is just a Channel with visibility DIRECT and a
+// fixed participant list, not a separate table. This is what structurally
+// guarantees every conversation has a clubId (and therefore a Sponsor
+// Teacher who can see it) — there is no way to build a platform-wide DM by
+// construction. See src/lib/chat.ts for the permission rules.
+
+model Channel {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  // Null for DIRECT channels — their display name is derived from the
+  // participant list client-side rather than stored.
+  name String?
+  // visibility: "OPEN" (visible to all members, joins instantly) |
+  // "REQUEST" (visible to all members, join needs Admin+ approval) |
+  // "INVITE" (invisible to non-members, only Admin+ can add someone) |
+  // "DIRECT" (a 1:1 or fixed-participant group chat)
+  visibility String
+  // Orthogonal to visibility — when true, only members with
+  // ChannelMembership.canPost may send; everyone else can read (and react)
+  // but not post.
+  restrictedPosting Boolean @default(false)
+
+  createdById String
+  createdBy   User   @relation("ChannelCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  memberships ChannelMembership[]
+  messages    ChatMessage[]
+
+  @@unique([clubId, name])
+}
+
+model ChannelMembership {
+  id        String  @id @default(cuid())
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // status: "ACTIVE" | "PENDING" — mirrors ClubMembership's join-request shape.
+  status String @default("ACTIVE")
+  // Meaningful only when the channel is restrictedPosting; ignored otherwise.
+  canPost Boolean @default(true)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([channelId, userId])
+}
+
+// Deliberately has no delete/edit-in-place/expiry field — permanent logging
+// is enforced at the schema level, not just by convention.
+model ChatMessage {
+  id            String   @id @default(cuid())
+  channelId     String
+  channel       Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User     @relation("ChatMessageSender", fields: [senderId], references: [id])
+  // body is always the real, original text as typed — the permanent record.
+  // filteredBody is set only when the profanity filter (src/lib/profanity-filter.ts)
+  // actually changed something; regular participants are shown
+  // filteredBody ?? body, but the club's Sponsor Teacher and OVERSIGHT
+  // viewers always see the real body — a filtered message shouldn't hide a
+  // real behavior problem from the one adult responsible for the club.
+  body          String
+  filteredBody  String?
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+
+  reactions ChatMessageReaction[]
+
+  @@index([channelId, createdAt])
+}
+
+model ChatMessageReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+
+  @@unique([messageId, userId, emoji])
 }
 
 // ---------- Events ----------
@@ -279,8 +535,37 @@ model Event {
 
   title                 String
   description           String
-  category              String   // "Meeting" | "Volunteer" | "Fundraiser" | "Competition" | ...
+  category              String   // "Meeting" | "Volunteer" | "Competition" | "Workshop" | "Social" | "Executive Meeting" | "Community Event" | "Sports Training"
   bannerUrl             String?
+
+  // approvalStatus: "PENDING_SPONSOR" | "PENDING_ADMIN" | "APPROVED" | "REJECTED".
+  // Events in an auto-approved category ("Meeting", "Executive Meeting" — see
+  // src/lib/approvals.ts) stay APPROVED from creation, exactly as before this
+  // field existed. Every other category enters the 2-stage Sponsor Teacher →
+  // Administrator chain; stage 1 auto-clears if the submitter is already the
+  // club's own Director. A pending/rejected event is hidden from students
+  // everywhere except to school staff (who can preview it), mirroring how
+  // Club.approvalStatus already gates visibility.
+  approvalStatus      String    @default("APPROVED")
+  sponsorApprovedById String?
+  sponsorApprovedBy   User?     @relation("EventSponsorApprovedBy", fields: [sponsorApprovedById], references: [id])
+  sponsorApprovedAt   DateTime?
+  adminApprovedById   String?
+  adminApprovedBy     User?     @relation("EventAdminApprovedBy", fields: [adminApprovedById], references: [id])
+  adminApprovedAt     DateTime?
+  rejectionReason     String?
+
+  // "Resources / logistics" — admin-only, never rendered on the public event page.
+  internalNotes  String?
+  purpose        String?
+  audience       String?
+  promotionPlan  String?
+  // Independent of category (a bake sale can be a Social event too) — see
+  // the backfill script that migrated the old "Fundraiser" category value.
+  isFundraiser       Boolean  @default(false)
+  fundraisingDetails String?
+  contactId          String?
+  contact            ClubContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   startAt               DateTime
   endAt                 DateTime
@@ -541,7 +826,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // "EVENT_REMINDER" | "ANNOUNCEMENT" | "REGISTRATION" | "SERVICE_HOURS" | "ACHIEVEMENT" | "PLATFORM"
+  type      String   // "EVENT_REMINDER" | "ANNOUNCEMENT" | "REGISTRATION" | "SERVICE_HOURS" | "ACHIEVEMENT" | "PLATFORM" | "CHAT_MESSAGE" | "CLUB_SUPERVISOR_REQUEST" | "EVENT_PROPOSAL" | "CLUB_REGISTRATION"
   title     String
   body      String
   linkUrl   String?

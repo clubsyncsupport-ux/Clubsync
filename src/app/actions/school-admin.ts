@@ -28,6 +28,7 @@ export async function createClubAsSchoolAdminAction(
   const category = String(formData.get("category") ?? "Other");
   const color = String(formData.get("color") ?? CLUB_COLOR_PALETTE[0].value);
   const meetingSchedule = String(formData.get("meetingSchedule") ?? "").trim();
+  const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
   if (!name || !description) return { error: "Club name and description are required." };
 
   const baseSlug = slugify(name);
@@ -46,6 +47,7 @@ export async function createClubAsSchoolAdminAction(
       color,
       schoolId: school.id,
       meetingSchedule: meetingSchedule || null,
+      allowedGrades,
       createdById: user.id,
     },
   });

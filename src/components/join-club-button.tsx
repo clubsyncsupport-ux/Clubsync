@@ -1,8 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { joinClubAction, leaveClubAction } from "@/app/actions/clubs";
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 
 export function JoinClubButton({
@@ -17,6 +18,14 @@ export function JoinClubButton({
   className?: string;
 }) {
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function join() {
+    startTransition(async () => {
+      const res = await joinClubAction(clubId);
+      setError(res.error);
+    });
+  }
 
   if (status === "ACTIVE") {
     return (
@@ -41,8 +50,11 @@ export function JoinClubButton({
   }
 
   return (
-    <Button size={size} className={className} disabled={pending} onClick={() => startTransition(() => joinClubAction(clubId))}>
-      {pending ? "Joining…" : "Join Club"}
-    </Button>
+    <div>
+      <Button size={size} className={className} disabled={pending} onClick={join}>
+        {pending ? "Joining…" : "Join Club"}
+      </Button>
+      <FieldError>{error}</FieldError>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { isSchoolAdminTier, schoolAdminTierLabel } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -70,7 +71,10 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   </Link>
                 </td>
                 <td className="px-4 py-2.5 text-text-secondary">{u.school?.name ?? "—"}</td>
-                <td className="px-4 py-2.5">{u.platformRole === "PLATFORM_ADMIN" && <Badge tone="accent">Admin</Badge>}</td>
+                <td className="px-4 py-2.5">
+                  {u.platformRole === "PLATFORM_ADMIN" && <Badge tone="accent">Admin</Badge>}
+                  {isSchoolAdminTier(u.platformRole) && <Badge tone="accent">{schoolAdminTierLabel(u.platformRole)}</Badge>}
+                </td>
                 <td className="px-4 py-2.5">
                   <Badge tone={u.accountStatus === "SUSPENDED" ? "danger" : "success"}>{u.accountStatus}</Badge>
                 </td>

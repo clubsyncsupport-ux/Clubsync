@@ -7,6 +7,7 @@ import { Badge, ColorDot } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreateClubForm } from "./create-club-form";
+import { schoolGradeLevels } from "@/lib/grades";
 
 export const metadata: Metadata = { title: "Clubs" };
 
@@ -18,7 +19,7 @@ export default async function SchoolAdminClubsPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { schoolId } = await params;
-  await getSchoolAdminContext(schoolId);
+  const { school } = await getSchoolAdminContext(schoolId);
   const { q } = await searchParams;
 
   const [clubs, takenColors] = await Promise.all([
@@ -47,7 +48,7 @@ export default async function SchoolAdminClubsPage({
       <Card className="mt-5">
         <div className="p-5">
           <p className="text-sm font-semibold text-text-primary">Add a Club</p>
-          <CreateClubForm schoolId={schoolId} takenColors={takenColors} />
+          <CreateClubForm schoolId={schoolId} takenColors={takenColors} gradeLevels={schoolGradeLevels(school)} />
         </div>
       </Card>
 

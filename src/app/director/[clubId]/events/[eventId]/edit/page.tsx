@@ -22,7 +22,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
   });
   if (!event || event.clubId !== clubId) notFound();
 
-  const [members, school, groups] = await Promise.all([
+  const [members, school, groups, contacts] = await Promise.all([
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
       include: { user: true },
@@ -30,6 +30,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
     }),
     db.school.findUniqueOrThrow({ where: { id: club.schoolId } }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
+    db.clubContact.findMany({ where: { clubId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const gradeLevels = schoolGradeLevels(school);
   const registeredUserIds = event.registrations.map((r) => r.userId);
@@ -46,6 +47,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
         invitedUserIds={event.invites.map((i) => i.userId)}
         groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
         gradeLevels={gradeLevels}
+        contacts={contacts}
         roles={event.roles.map((r) => ({
           id: r.id,
           name: r.name,
@@ -76,6 +78,15 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
           serviceTaskDescription: event.serviceTaskDescription,
           attendanceEnabled: event.attendanceEnabled,
           isRecurring: event.recurrence !== "NONE" || !!event.recurrenceParentId,
+          approvalStatus: event.approvalStatus,
+          rejectionReason: event.rejectionReason,
+          isFundraiser: event.isFundraiser,
+          fundraisingDetails: event.fundraisingDetails,
+          purpose: event.purpose,
+          audience: event.audience,
+          promotionPlan: event.promotionPlan,
+          internalNotes: event.internalNotes,
+          contactId: event.contactId,
         }}
       />
     </div>

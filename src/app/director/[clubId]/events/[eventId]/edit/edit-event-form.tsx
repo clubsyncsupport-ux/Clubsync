@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { updateEventAction } from "@/app/actions/director-events";
+import { revealClubContactPhoneAction } from "@/app/actions/club-contacts";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, Select, FieldError } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { EVENT_CATEGORIES } from "@/lib/constants";
+import { Badge } from "@/components/ui/badge";
+import { EVENT_CATEGORIES, AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
 import { format } from "date-fns";
 
 type EventForEdit = {
@@ -31,6 +33,15 @@ type EventForEdit = {
   serviceTaskDescription: string | null;
   attendanceEnabled: boolean;
   isRecurring: boolean;
+  approvalStatus: string;
+  rejectionReason: string | null;
+  isFundraiser: boolean;
+  fundraisingDetails: string | null;
+  purpose: string | null;
+  audience: string | null;
+  promotionPlan: string | null;
+  internalNotes: string | null;
+  contactId: string | null;
 };
 
 type RoleDraft = {
@@ -50,6 +61,7 @@ export function EditEventForm({
   invitedUserIds,
   groups = [],
   gradeLevels,
+  contacts = [],
   roles: initialRoles,
 }: {
   event: EventForEdit;
@@ -58,6 +70,7 @@ export function EditEventForm({
   invitedUserIds: string[];
   groups?: { id: string; name: string; color: string; memberIds: string[] }[];
   gradeLevels: string[];
+  contacts?: { id: string; name: string }[];
   roles: { id: string; name: string; capacity: number; allowedGrades: string[] | null; waitlistCapacity: number | null; filledCount: number }[];
 }) {
   const router = useRouter();
@@ -68,6 +81,20 @@ export function EditEventForm({
   const [waitlistEnabled, setWaitlistEnabled] = useState(event.waitlistEnabled);
   const [endsNextDay, setEndsNextDay] = useState(() => format(event.startAt, "yyyy-MM-dd") !== format(event.endAt, "yyyy-MM-dd"));
   const [allowedGrades, setAllowedGrades] = useState<string[]>(event.allowedGrades ?? [...gradeLevels]);
+  const [category, setCategory] = useState(event.category);
+  const [isFundraiser, setIsFundraiser] = useState(event.isFundraiser);
+  const [contactId, setContactId] = useState(event.contactId ?? "");
+  const [contactPhone, setContactPhone] = useState<string | null>(null);
+  const [contactPhonePending, startContactPhoneTransition] = useTransition();
+  const needsProposal = !(AUTO_APPROVED_EVENT_CATEGORIES as readonly string[]).includes(category);
+
+  function revealContactPhone() {
+    if (!contactId) return;
+    startContactPhoneTransition(async () => {
+      const res = await revealClubContactPhoneAction(contactId);
+      setContactPhone(res.phone ?? res.error ?? null);
+    });
+  }
   const [roles, setRoles] = useState<RoleDraft[]>(
     initialRoles.map((r) => ({
       key: r.id,
@@ -182,6 +209,17 @@ export function EditEventForm({
 
   return (
     <form action={handleSubmit} className="mt-6 space-y-5">
+      {event.approvalStatus !== "APPROVED" && (
+        <Card className={event.approvalStatus === "REJECTED" ? "border-danger/30 bg-danger-soft" : "border-warning/30 bg-warning-soft"}>
+          <CardContent className="p-4">
+            <Badge tone={event.approvalStatus === "REJECTED" ? "danger" : "warning"}>
+              {event.approvalStatus === "PENDING_SPONSOR" ? "Awaiting sponsor approval" : event.approvalStatus === "PENDING_ADMIN" ? "Awaiting administrator approval" : "Not approved"}
+            </Badge>
+            {event.rejectionReason && <p className="mt-2 text-sm text-text-primary">{event.rejectionReason}</p>}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="space-y-4 p-5">
           <p className="text-sm font-semibold text-text-primary">Basic Information</p>
@@ -195,7 +233,7 @@ export function EditEventForm({
           </div>
           <div>
             <Label htmlFor="category">Category</Label>
-            <Select id="category" name="category" defaultValue={event.category}>
+            <Select id="category" name="category" value={category} onChange={(e) => setCategory(e.target.value)}>
               {EVENT_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -203,6 +241,16 @@ export function EditEventForm({
               ))}
             </Select>
           </div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+            <input type="checkbox" name="isFundraiser" checked={isFundraiser} onChange={(e) => setIsFundraiser(e.target.checked)} className="h-4 w-4 accent-accent" />
+            This event includes fundraising
+          </label>
+          {isFundraiser && (
+            <div className="pl-6">
+              <Label htmlFor="fundraisingDetails">Fundraising details</Label>
+              <Textarea id="fundraisingDetails" name="fundraisingDetails" rows={2} defaultValue={event.fundraisingDetails ?? ""} placeholder="What's being raised, and for what?" />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -261,6 +309,61 @@ export function EditEventForm({
           </div>
         </CardContent>
       </Card>
+
+      {needsProposal && (
+        <Card>
+          <CardContent className="space-y-4 p-5">
+            <p className="text-sm font-semibold text-text-primary">Proposal Details</p>
+            <div>
+              <Label htmlFor="purpose">Purpose</Label>
+              <Textarea id="purpose" name="purpose" rows={2} defaultValue={event.purpose ?? ""} placeholder="Why is this event happening?" />
+            </div>
+            <div>
+              <Label htmlFor="audience">Audience</Label>
+              <Input id="audience" name="audience" defaultValue={event.audience ?? ""} placeholder="Who is this for?" />
+            </div>
+            <div>
+              <Label htmlFor="promotionPlan">Promotion plan</Label>
+              <Textarea id="promotionPlan" name="promotionPlan" rows={2} defaultValue={event.promotionPlan ?? ""} placeholder="Posters, social media, announcements…" />
+            </div>
+            {contacts.length > 0 && (
+              <div>
+                <Label htmlFor="contactId">Student contact (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    id="contactId"
+                    name="contactId"
+                    value={contactId}
+                    onChange={(e) => {
+                      setContactId(e.target.value);
+                      setContactPhone(null);
+                    }}
+                    className="flex-1"
+                  >
+                    <option value="">None</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {contactId && (
+                    <Button type="button" variant="secondary" size="sm" disabled={contactPhonePending} onClick={revealContactPhone}>
+                      {contactPhonePending ? "…" : "Show phone"}
+                    </Button>
+                  )}
+                </div>
+                {contactPhone && <p className="mt-1.5 text-xs text-text-secondary">{contactPhone}</p>}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="internalNotes">Resources / logistics</Label>
+              <Textarea id="internalNotes" name="internalNotes" rows={2} defaultValue={event.internalNotes ?? ""} placeholder="What's needed to make this happen?" />
+              <p className="mt-1.5 text-xs text-text-muted">Visible to school admins only — never shown on the public event page.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="space-y-4 p-5">

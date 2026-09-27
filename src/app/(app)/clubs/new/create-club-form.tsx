@@ -6,19 +6,33 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea, FieldError } from "@/components/ui/input";
 import { ClubColorPicker } from "@/components/ui/club-color-picker";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
+import { GradeChipPicker } from "@/components/ui/grade-chip-picker";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/cn";
 import { CLUB_CATEGORIES, CLUB_COLOR_PALETTE } from "@/lib/constants";
 
 type Teacher = { id: string; firstName: string; lastName: string; avatarUrl: string | null };
 
-export function CreateClubForm({ takenColors = [], teachers = [] }: { takenColors?: string[]; teachers?: Teacher[] }) {
+export function CreateClubForm({
+  takenColors = [],
+  teachers = [],
+  gradeLevels = [],
+}: {
+  takenColors?: string[];
+  teachers?: Teacher[];
+  gradeLevels?: string[];
+}) {
   const [state, formAction, pending] = useActionState(createClubAction, { error: null });
   const [name, setName] = useState("");
   const [categories, setCategories] = useState<string[]>([CLUB_CATEGORIES[0]]);
   const [color, setColor] = useState<string>(CLUB_COLOR_PALETTE.find((c) => !takenColors.includes(c.value))?.value ?? CLUB_COLOR_PALETTE[0].value);
   const [similarClubs, setSimilarClubs] = useState<{ id: string; name: string }[]>([]);
   const [supervisorId, setSupervisorId] = useState<string>("");
+  const [allowedGrades, setAllowedGrades] = useState<string[]>([...gradeLevels]);
+
+  function toggleGrade(g: string) {
+    setAllowedGrades((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -67,6 +81,12 @@ export function CreateClubForm({ takenColors = [], teachers = [] }: { takenColor
         <Label htmlFor="meetingSchedule">Meeting schedule (optional)</Label>
         <Input id="meetingSchedule" name="meetingSchedule" placeholder="e.g. Tuesdays 3:30 PM, Room 204" />
       </div>
+      {gradeLevels.length > 0 && (
+        <div>
+          <input type="hidden" name="allowedGrades" value={allowedGrades.length < gradeLevels.length ? allowedGrades.join(",") : ""} />
+          <GradeChipPicker gradeLevels={gradeLevels} selected={allowedGrades} onToggle={toggleGrade} />
+        </div>
+      )}
 
       {needsSupervisor && (
         <div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { ColorDot } from "@/components/ui/badge";
@@ -26,13 +27,13 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
     where: { slug },
     include: {
       memberships: {
-        where: { status: "ACTIVE", role: { in: ["DIRECTOR", "OFFICER"] } },
+        where: { status: "ACTIVE", role: { in: ["DIRECTOR", "OFFICER", "SUPER_ADMIN"] } },
         include: { user: true },
       },
       _count: { select: { memberships: { where: { status: "ACTIVE" } } } },
       announcements: { orderBy: { createdAt: "desc" }, take: 5, include: { createdBy: true } },
       events: {
-        where: { status: "SCHEDULED", startAt: { gte: new Date() } },
+        where: { status: "SCHEDULED", startAt: { gte: new Date() }, approvalStatus: "APPROVED" },
         orderBy: { startAt: "asc" },
         take: 8,
       },
@@ -53,6 +54,15 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
   const myMembership =
     viewer.memberships.find((m) => m.clubId === club.id) ??
     (await db.clubMembership.findUnique({ where: { userId_clubId: { userId: viewer.id, clubId: club.id } } }));
+
+  const isActiveMember = myMembership?.status === "ACTIVE";
+  const [openPositions, myApplications] = isActiveMember
+    ? await Promise.all([
+        db.clubPosition.findMany({ where: { clubId: club.id, status: "OPEN" }, orderBy: { createdAt: "desc" } }),
+        db.positionApplication.findMany({ where: { userId: viewer.id, position: { clubId: club.id } }, select: { positionId: true } }),
+      ])
+    : [[], []];
+  const appliedPositionIds = new Set(myApplications.map((a) => a.positionId));
 
   return (
     <div className="animate-fade-in">
@@ -92,11 +102,21 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
               {parseCategories(club.category).join(", ")} · {club._count.memberships} members
             </div>
           </div>
-          <JoinClubButton clubId={club.id} status={(myMembership?.status as "ACTIVE" | "PENDING") ?? "NONE"} />
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <JoinClubButton clubId={club.id} status={(myMembership?.status as "ACTIVE" | "PENDING") ?? "NONE"} />
+            {myMembership?.status === "ACTIVE" && (
+              <Link href={`/clubs/${club.slug}/chat`} className="text-xs font-medium text-accent">
+                💬 Chat
+              </Link>
+            )}
+          </div>
         </div>
 
         <p className="mt-5 text-[15px] leading-relaxed text-text-primary">{club.description}</p>
         {club.missionStatement && <p className="mt-2 text-sm italic text-text-secondary">&ldquo;{club.missionStatement}&rdquo;</p>}
+        {club.allowedGrades && (
+          <p className="mt-2 text-xs font-medium text-text-muted">Open to {club.allowedGrades.split(",").join(", ")} only</p>
+        )}
 
         <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-text-secondary sm:grid-cols-2">
           {club.meetingSchedule && (
@@ -126,7 +146,7 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
                   <span className="text-sm font-medium text-text-primary">
                     {m.user.firstName} {m.user.lastName}
                   </span>
-                  <span className="text-xs text-text-muted">{m.role === "DIRECTOR" ? "Director" : "Officer"}</span>
+                  <span className="text-xs text-text-muted">{m.role === "DIRECTOR" ? "Director" : m.role === "SUPER_ADMIN" ? "Super Admin" : "Admin"}</span>
                 </div>
               ))}
             </div>
@@ -151,6 +171,37 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
             </div>
           )}
         </div>
+
+        {openPositions.length > 0 && (
+          <div className="mt-8">
+            <h2 className="mb-3 text-lg font-semibold text-text-primary">Open Positions</h2>
+            <div className="space-y-2">
+              {openPositions.map((p) => {
+                const applied = appliedPositionIds.has(p.id);
+                return (
+                  <Card key={p.id}>
+                    <CardContent className="flex items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <p className="font-medium text-text-primary">{p.title}</p>
+                        {p.description && <p className="mt-0.5 truncate text-sm text-text-secondary">{p.description}</p>}
+                      </div>
+                      {applied ? (
+                        <span className="shrink-0 text-sm font-medium text-success">Applied ✓</span>
+                      ) : (
+                        <Link
+                          href={`/clubs/${club.slug}/positions/${p.id}/apply`}
+                          className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-accent-hover"
+                        >
+                          Apply
+                        </Link>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="mt-8">
           <h2 className="mb-3 text-lg font-semibold text-text-primary">Announcements</h2>

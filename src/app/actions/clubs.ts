@@ -23,6 +23,7 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
   const category = String(formData.get("category") ?? "Other");
   const color = String(formData.get("color") ?? CLUB_COLOR_PALETTE[0].value);
   const meetingSchedule = String(formData.get("meetingSchedule") ?? "").trim();
+  const allowedGrades = String(formData.get("allowedGrades") ?? "").trim() || null;
 
   if (!name || !description) return { error: "Club name and description are required." };
 
@@ -55,6 +56,7 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
       color,
       schoolId: user.schoolId,
       meetingSchedule: meetingSchedule || null,
+      allowedGrades,
       createdById: user.id,
       approvalStatus: supervisor ? "PENDING_SUPERVISOR" : "APPROVED",
       pendingSupervisorId: supervisor?.id,
@@ -101,22 +103,33 @@ export async function checkClubNameForSchoolAction(name: string) {
   return { similar };
 }
 
-export async function joinClubAction(clubId: string) {
-  const user = await requireUser();
-  const club = await db.club.findUniqueOrThrow({ where: { id: clubId } });
+export async function joinClubAction(clubId: string): Promise<{ error: string | null }> {
+  const authUser = await requireUser();
+  const [me, club] = await Promise.all([
+    db.user.findUniqueOrThrow({ where: { id: authUser.id } }),
+    db.club.findUniqueOrThrow({ where: { id: clubId } }),
+  ]);
+
+  if (club.allowedGrades) {
+    const allowed = club.allowedGrades.split(",");
+    if (!me.grade || !allowed.includes(me.grade)) {
+      return { error: `This club is only open to ${allowed.join(", ")}.` };
+    }
+  }
 
   await db.clubMembership.upsert({
-    where: { userId_clubId: { userId: user.id, clubId } },
+    where: { userId_clubId: { userId: me.id, clubId } },
     update: { status: club.requiresApproval ? "PENDING" : "ACTIVE" },
-    create: { userId: user.id, clubId, role: "MEMBER", status: club.requiresApproval ? "PENDING" : "ACTIVE" },
+    create: { userId: me.id, clubId, role: "MEMBER", status: club.requiresApproval ? "PENDING" : "ACTIVE" },
   });
 
-  await checkAndUnlockAchievements(user.id);
+  await checkAndUnlockAchievements(me.id);
 
   revalidatePath("/discover");
   revalidatePath(`/clubs/${club.slug}`);
   revalidatePath("/my-clubs");
   revalidatePath("/home");
+  return { error: null };
 }
 
 export async function leaveClubAction(clubId: string) {

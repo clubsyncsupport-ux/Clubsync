@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { formatEventDate, timeAgo } from "@/lib/format";
 import { greeting } from "@/lib/format";
+import { schoolYearFor } from "@/lib/school-year";
 import { Plus, Megaphone, Users, Shield, CalendarDays, BarChart3, type LucideIcon } from "lucide-react";
 
 export async function generateMetadata({ params }: { params: Promise<{ clubId: string }> }): Promise<Metadata> {
@@ -19,17 +20,20 @@ export default async function DirectorDashboardPage({ params }: { params: Promis
   const { clubId } = await params;
   const { club, user } = await getDirectorContext(clubId);
 
-  const [memberCount, upcomingEvents, pendingApprovals, pendingServiceHours, recentAnnouncements, nextEvent, pendingSupervisor] = await Promise.all([
-    db.clubMembership.count({ where: { clubId, status: "ACTIVE" } }),
-    db.event.count({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } } }),
-    db.clubMembership.count({ where: { clubId, status: "PENDING" } }),
-    db.event.count({ where: { clubId, status: "COMPLETED" } }),
-    db.announcement.findMany({ where: { clubId }, orderBy: { createdAt: "desc" }, take: 3 }),
-    db.event.findFirst({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } }, orderBy: { startAt: "asc" } }),
-    club.approvalStatus === "PENDING_SUPERVISOR" && club.pendingSupervisorId
-      ? db.user.findUnique({ where: { id: club.pendingSupervisorId }, select: { firstName: true, lastName: true } })
-      : Promise.resolve(null),
-  ]);
+  const schoolYear = schoolYearFor(new Date());
+  const [memberCount, upcomingEvents, pendingApprovals, pendingServiceHours, recentAnnouncements, nextEvent, pendingSupervisor, currentRegistration] =
+    await Promise.all([
+      db.clubMembership.count({ where: { clubId, status: "ACTIVE" } }),
+      db.event.count({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } } }),
+      db.clubMembership.count({ where: { clubId, status: "PENDING" } }),
+      db.event.count({ where: { clubId, status: "COMPLETED" } }),
+      db.announcement.findMany({ where: { clubId }, orderBy: { createdAt: "desc" }, take: 3 }),
+      db.event.findFirst({ where: { clubId, status: "SCHEDULED", startAt: { gte: new Date() } }, orderBy: { startAt: "asc" } }),
+      club.approvalStatus === "PENDING_SUPERVISOR" && club.pendingSupervisorId
+        ? db.user.findUnique({ where: { id: club.pendingSupervisorId }, select: { firstName: true, lastName: true } })
+        : Promise.resolve(null),
+      db.clubRegistration.findUnique({ where: { clubId_schoolYear: { clubId, schoolYear } } }),
+    ]);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 space-y-6 animate-fade-in">
@@ -48,6 +52,17 @@ export default async function DirectorDashboardPage({ params }: { params: Promis
               Not visible to anyone yet — {pendingSupervisor ? `${pendingSupervisor.firstName} ${pendingSupervisor.lastName}` : "your supervisor"} still needs
               to approve this club.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!currentRegistration && (
+        <Card className="border-warning/30 bg-warning-soft">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <p className="text-sm text-warning">Registration needed for {schoolYear}.</p>
+            <Link href={`/director/${clubId}/registration`} className="shrink-0 text-sm font-medium text-warning underline">
+              Register now
+            </Link>
           </CardContent>
         </Card>
       )}

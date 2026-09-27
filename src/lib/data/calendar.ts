@@ -5,6 +5,7 @@ export async function getVisibleEvents(userId: string, clubIds: string[], start:
     where: {
       status: { not: "CANCELLED" },
       startAt: { gte: start, lte: end },
+      approvalStatus: "APPROVED",
       club: { id: { in: clubIds } },
       OR: [{ visibility: "PUBLIC" }, { visibility: "PRIVATE", invites: { some: { userId } } }],
     },

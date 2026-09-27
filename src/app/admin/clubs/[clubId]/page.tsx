@@ -52,14 +52,23 @@ export default async function AdminClubDetailPage({ params }: { params: Promise<
         </Badge>
       </div>
 
-      <Link
-        href={`/director/${club.id}`}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover"
-      >
-        🛡 Manage as Teacher →
-      </Link>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={`/director/${club.id}`}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover"
+        >
+          🛡 Manage as Teacher →
+        </Link>
+        <Link
+          href={`/director/${club.id}/chat`}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-2"
+        >
+          💬 View Chat (read-only)
+        </Link>
+      </div>
       <p className="mt-1.5 text-xs text-text-muted">
         Opens this club&rsquo;s full teacher dashboard — events, members, announcements, and settings — so you can step in and help.
+        Chat oversight is always read-only, even from here — no posting or moderating on someone else&rsquo;s behalf.
       </p>
 
       <p className="mt-4 text-sm text-text-primary">{club.description}</p>

@@ -5,6 +5,7 @@ import { generateEventReminders } from "@/lib/reminders";
 import { AppShell } from "@/components/nav/app-shell";
 import { NotificationToastListener } from "@/components/notification-toast-listener";
 import type { NavItem } from "@/components/nav/nav-links";
+import { isSchoolAdminTier, schoolAdminTierLabel } from "@/lib/constants";
 
 const STUDENT_NAV: NavItem[] = [
   { href: "/home", label: "Home", icon: "Home", exact: true },
@@ -20,10 +21,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   await generateEventReminders(viewer.id);
   const unreadCount = await db.notification.count({ where: { userId: viewer.id, read: false } });
 
-  const schoolAdminOf =
-    viewer.platformRole === "SCHOOL_ADMIN" && viewer.schoolAdminOfId
+  const schoolAdminOfSchool =
+    isSchoolAdminTier(viewer.platformRole) && viewer.schoolAdminOfId
       ? await db.school.findUnique({ where: { id: viewer.schoolAdminOfId }, select: { id: true, name: true } })
       : null;
+  const schoolAdminOf = schoolAdminOfSchool
+    ? { ...schoolAdminOfSchool, roleLabel: schoolAdminTierLabel(viewer.platformRole) }
+    : null;
 
   return (
     <AppShell

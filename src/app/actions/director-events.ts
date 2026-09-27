@@ -7,6 +7,8 @@ import { db } from "@/lib/db";
 import { getDirectorContext } from "@/lib/director";
 import { saveUploadedFile } from "@/lib/storage";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
+import { initialApprovalStatus, notifySchoolAdmins } from "@/lib/approvals";
+import { AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
 import type { Event } from "@prisma/client";
 
 export type ActionState = { error: string | null };
@@ -18,7 +20,7 @@ function combineDateTime(date: string, time: string, dayOffset = 0): Date {
 }
 
 export async function createEventAction(clubId: string, formData: FormData): Promise<ActionState> {
-  const { club } = await getDirectorContext(clubId);
+  const { club, user } = await getDirectorContext(clubId);
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
@@ -63,8 +65,24 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
       waitlistCapacity: roleWaitlistCapacitiesRaw[i]?.trim() ? Number(roleWaitlistCapacitiesRaw[i]) : null,
     }))
     .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
+  const internalNotes = String(formData.get("internalNotes") ?? "").trim() || null;
+  const purpose = String(formData.get("purpose") ?? "").trim() || null;
+  const audience = String(formData.get("audience") ?? "").trim() || null;
+  const promotionPlan = String(formData.get("promotionPlan") ?? "").trim() || null;
+  const isFundraiser = formData.get("isFundraiser") === "on";
+  const fundraisingDetails = isFundraiser ? String(formData.get("fundraisingDetails") ?? "").trim() || null : null;
+  const contactId = String(formData.get("contactId") ?? "").trim() || null;
 
   if (!title || !description || !date) return { error: "Title, description, and date are required." };
+
+  // Routine meetings skip the approval chain entirely, exactly as before this
+  // existed. Every other category needs Sponsor Teacher -> Administrator
+  // sign-off — stage 1 auto-clears if the actual submitter is already the
+  // club's Director (their own submission is their sign-off).
+  const isAutoApproved = (AUTO_APPROVED_EVENT_CATEGORIES as readonly string[]).includes(category);
+  const { status: approvalStatus, autoSponsor } = isAutoApproved
+    ? { status: "APPROVED" as const, autoSponsor: false }
+    : await initialApprovalStatus(clubId, user.id);
 
   const startAt = combineDateTime(date, startTime);
   const endAt = combineDateTime(date, endTime, endsNextDay ? 1 : 0);
@@ -124,6 +142,16 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         recurrenceParentId: parentId,
         recurrenceUntil: recurrenceUntilRaw ? new Date(recurrenceUntilRaw) : null,
         createdById: club.createdById,
+        internalNotes,
+        purpose,
+        audience,
+        promotionPlan,
+        isFundraiser,
+        fundraisingDetails,
+        contactId,
+        approvalStatus,
+        sponsorApprovedById: autoSponsor ? user.id : null,
+        sponsorApprovedAt: autoSponsor ? new Date() : null,
         invites: visibility === "PRIVATE" ? { create: allInviteIds.map((userId) => ({ userId })) } : undefined,
         attachments: savedAttachments.length ? { create: savedAttachments } : undefined,
         registrations: assignedUserIds.length ? { create: assignedUserIds.map((userId) => ({ userId, status: "REGISTERED" as const })) } : undefined,
@@ -153,6 +181,30 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         linkUrl: `/events/${parentId}`,
       })),
     });
+  }
+
+  if (!isAutoApproved && parentId) {
+    if (approvalStatus === "PENDING_SPONSOR") {
+      const director = await db.clubMembership.findFirst({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" } });
+      if (director) {
+        await db.notification.create({
+          data: {
+            userId: director.userId,
+            type: "EVENT_PROPOSAL",
+            title: "Event proposal needs your sign-off",
+            body: `"${title}" needs your approval as Sponsor Teacher before it goes to the school administrator.`,
+            linkUrl: `/director/${clubId}/events/${parentId}`,
+          },
+        });
+      }
+    } else {
+      await notifySchoolAdmins(club.schoolId, {
+        type: "EVENT_PROPOSAL",
+        title: "Event proposal needs your approval",
+        body: `"${title}" has been sponsor-approved and is ready for administrator review.`,
+        linkUrl: `/school-admin/${club.schoolId}/approvals`,
+      });
+    }
   }
 
   revalidatePath(`/director/${clubId}/events`);
@@ -207,6 +259,13 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
       defaultServiceHours: formData.get("awardsServiceHours") === "on" ? Number(formData.get("defaultServiceHours") ?? 0) : 0,
       serviceTaskDescription: String(formData.get("serviceTaskDescription") ?? "").trim() || null,
       attendanceEnabled: formData.get("attendanceEnabled") === "on",
+      internalNotes: String(formData.get("internalNotes") ?? "").trim() || null,
+      purpose: String(formData.get("purpose") ?? "").trim() || null,
+      audience: String(formData.get("audience") ?? "").trim() || null,
+      promotionPlan: String(formData.get("promotionPlan") ?? "").trim() || null,
+      isFundraiser: formData.get("isFundraiser") === "on",
+      fundraisingDetails: formData.get("isFundraiser") === "on" ? String(formData.get("fundraisingDetails") ?? "").trim() || null : null,
+      contactId: String(formData.get("contactId") ?? "").trim() || null,
     },
   });
 

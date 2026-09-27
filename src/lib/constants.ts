@@ -5,10 +5,42 @@
 export const GRADES = ["Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"] as const;
 export type Grade = (typeof GRADES)[number];
 
-export const PLATFORM_ROLES = ["STUDENT", "SCHOOL_ADMIN", "PLATFORM_ADMIN"] as const;
+export const PLATFORM_ROLES = ["STUDENT", "SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL", "PLATFORM_ADMIN"] as const;
 export type PlatformRole = (typeof PLATFORM_ROLES)[number];
 
-export const CLUB_ROLES = ["MEMBER", "OFFICER", "DIRECTOR"] as const;
+// Principal/Vice Principal get identical "School Admin"-shaped access to
+// every school-scoped screen (see isSchoolAdminTier below) — they're
+// distinct platformRole values only so approval routing can notify/label
+// them specifically, not because their access differs from a plain School
+// Admin's.
+export const SCHOOL_ADMIN_TIER_ROLES = ["SCHOOL_ADMIN", "PRINCIPAL", "VICE_PRINCIPAL"] as const;
+export function isSchoolAdminTier(role: string): boolean {
+  return (SCHOOL_ADMIN_TIER_ROLES as readonly string[]).includes(role);
+}
+
+// Only Principal/Vice Principal (and Platform Admin, checked separately by
+// callers) can actually approve/reject in the event-proposal and
+// club-registration queues — a plain School Admin sees the same queue
+// read-only, the same "can view but not act" split OFFICER already gets
+// relative to DIRECTOR in getDirectorContext.
+export const APPROVAL_ACTIONABLE_ROLES = ["PRINCIPAL", "VICE_PRINCIPAL"] as const;
+export function canActionApprovals(role: string): boolean {
+  return (APPROVAL_ACTIONABLE_ROLES as readonly string[]).includes(role);
+}
+
+export function schoolAdminTierLabel(role: string): string {
+  if (role === "PRINCIPAL") return "Principal";
+  if (role === "VICE_PRINCIPAL") return "Vice Principal";
+  return "School Admin";
+}
+
+// SUPER_ADMIN sits strictly above OFFICER ("Admin") and below DIRECTOR — a
+// trusted student-leader tier added for club chat (day-to-day chat
+// management so the Sponsor Teacher isn't a bottleneck). Strictly additive:
+// every existing OFFICER-level capability (getDirectorContext's
+// isAuthorized check) also applies to SUPER_ADMIN, so promoting someone
+// never takes anything away.
+export const CLUB_ROLES = ["MEMBER", "OFFICER", "SUPER_ADMIN", "DIRECTOR"] as const;
 export type ClubRole = (typeof CLUB_ROLES)[number];
 
 export const MEMBERSHIP_STATUSES = ["ACTIVE", "PENDING"] as const;
@@ -66,7 +98,6 @@ export type ClubCategory = (typeof CLUB_CATEGORIES)[number];
 export const EVENT_CATEGORIES = [
   "Meeting",
   "Volunteer",
-  "Fundraiser",
   "Competition",
   "Workshop",
   "Social",
@@ -75,6 +106,11 @@ export const EVENT_CATEGORIES = [
   "Sports Training",
 ] as const;
 export type EventCategoryT = (typeof EVENT_CATEGORIES)[number];
+
+// Routine club meetings skip the event-proposal approval chain entirely —
+// every other category needs Sponsor Teacher + Administrator sign-off. See
+// src/lib/approvals.ts.
+export const AUTO_APPROVED_EVENT_CATEGORIES = ["Meeting", "Executive Meeting"] as const;
 
 export const THEMES = ["light", "dark", "system"] as const;
 export type ThemePref = (typeof THEMES)[number];

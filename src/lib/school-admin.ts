@@ -3,6 +3,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { isSchoolAdminTier } from "@/lib/constants";
 
 // Loads a school and verifies the current user is its assigned School Admin
 // (or a Platform Admin, who has full power in every school). Every
@@ -19,11 +20,11 @@ export const getSchoolAdminContext = cache(async (schoolId: string) => {
   if (!school) notFound();
 
   const isPlatformAdmin = me.platformRole === "PLATFORM_ADMIN";
-  const isSchoolAdminHere = me.platformRole === "SCHOOL_ADMIN" && me.schoolAdminOfId === schoolId;
+  const isSchoolAdminHere = isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId === schoolId;
   const isAuthorized = isSchoolAdminHere || isPlatformAdmin;
   if (!isAuthorized) notFound();
 
-  return { school, user: authUser, isPlatformAdmin };
+  return { school, user: authUser, isPlatformAdmin, platformRole: me.platformRole };
 });
 
 // For actions/pages that start from a club (or another school-owned resource)
@@ -34,8 +35,8 @@ export const getSchoolAdminContext = cache(async (schoolId: string) => {
 export async function getSchoolAdminContextForClub(clubId: string) {
   const club = await db.club.findUnique({ where: { id: clubId } });
   if (!club) notFound();
-  const { school, user, isPlatformAdmin } = await getSchoolAdminContext(club.schoolId);
-  return { club, school, user, isPlatformAdmin };
+  const { school, user, isPlatformAdmin, platformRole } = await getSchoolAdminContext(club.schoolId);
+  return { club, school, user, isPlatformAdmin, platformRole };
 }
 
 // For user-management actions (suspend/reactivate/delete) that a School Admin
@@ -53,7 +54,7 @@ export async function requireSchoolAccessForUser(targetUserId: string) {
   if (me.platformRole === "PLATFORM_ADMIN") return { me, targetUser, isPlatformAdmin: true };
 
   const isSchoolAdminForTarget =
-    me.platformRole === "SCHOOL_ADMIN" &&
+    isSchoolAdminTier(me.platformRole) &&
     me.schoolAdminOfId !== null &&
     me.schoolAdminOfId === targetUser.schoolId &&
     targetUser.platformRole === "STUDENT";
@@ -77,7 +78,7 @@ export async function requireSchoolAccessForStaffApproval(targetUserId: string) 
   if (me.platformRole === "PLATFORM_ADMIN") return { me, targetUser, isPlatformAdmin: true };
 
   const isSchoolAdminForTarget =
-    me.platformRole === "SCHOOL_ADMIN" &&
+    isSchoolAdminTier(me.platformRole) &&
     me.schoolAdminOfId !== null &&
     me.schoolAdminOfId === targetUser.schoolId &&
     targetUser.accountKind === "STAFF";

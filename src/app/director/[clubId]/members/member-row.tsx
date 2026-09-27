@@ -4,7 +4,9 @@ import { useTransition } from "react";
 import { approveMembershipAction, denyMembershipAction, removeMemberAction, promoteMemberAction } from "@/app/actions/director-club";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import type { ClubMembership, User } from "@prisma/client";
+import type { ClubMembership } from "@prisma/client";
+
+type MemberRowUser = { firstName: string; lastName: string; avatarUrl: string | null; grade: string | null; email: string };
 
 export function MemberRow({
   membership,
@@ -13,7 +15,7 @@ export function MemberRow({
   pending = false,
   groups = [],
 }: {
-  membership: ClubMembership & { user: User };
+  membership: ClubMembership & { user: MemberRowUser };
   clubId: string;
   isDirector: boolean;
   pending?: boolean;
@@ -38,7 +40,9 @@ export function MemberRow({
           {user.grade ?? "—"} · {user.email}
         </p>
       </div>
-      {membership.role !== "MEMBER" && <Badge tone="accent">{membership.role === "DIRECTOR" ? "Teacher" : "Admin"}</Badge>}
+      {membership.role !== "MEMBER" && (
+        <Badge tone="accent">{membership.role === "DIRECTOR" ? "Teacher" : membership.role === "SUPER_ADMIN" ? "Super Admin" : "Admin"}</Badge>
+      )}
 
       {pending ? (
         <div className="flex gap-2">
@@ -61,7 +65,7 @@ export function MemberRow({
         membership.role !== "DIRECTOR" &&
         isDirector && (
           <div className="flex gap-2">
-            {membership.role === "MEMBER" ? (
+            {membership.role === "MEMBER" && (
               <button
                 disabled={isPending}
                 onClick={() => startTransition(() => promoteMemberAction(membership.id, clubId, "OFFICER"))}
@@ -69,13 +73,32 @@ export function MemberRow({
               >
                 Make Admin
               </button>
-            ) : (
+            )}
+            {membership.role === "OFFICER" && (
+              <>
+                <button
+                  disabled={isPending}
+                  onClick={() => startTransition(() => promoteMemberAction(membership.id, clubId, "SUPER_ADMIN"))}
+                  className="text-xs font-medium text-accent"
+                >
+                  Make Super Admin
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => startTransition(() => promoteMemberAction(membership.id, clubId, "MEMBER"))}
+                  className="text-xs font-medium text-danger"
+                >
+                  Remove Admin
+                </button>
+              </>
+            )}
+            {membership.role === "SUPER_ADMIN" && (
               <button
                 disabled={isPending}
-                onClick={() => startTransition(() => promoteMemberAction(membership.id, clubId, "MEMBER"))}
+                onClick={() => startTransition(() => promoteMemberAction(membership.id, clubId, "OFFICER"))}
                 className="text-xs font-medium text-danger"
               >
-                Remove Admin
+                Remove Super Admin
               </button>
             )}
             <button

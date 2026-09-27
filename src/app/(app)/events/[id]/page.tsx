@@ -10,7 +10,7 @@ import { RecurringSeriesJoin } from "@/components/recurring-series-join";
 import { ShareButton } from "@/components/share-button";
 import { BackButton } from "@/components/ui/back-button";
 import { formatTimeRange } from "@/lib/format";
-import { parseReminderOffsets } from "@/lib/constants";
+import { parseReminderOffsets, isSchoolAdminTier } from "@/lib/constants";
 import { format } from "date-fns";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -55,10 +55,15 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
   const isSchoolStaff =
     event.club.approvalStatus === "APPROVED" &&
     (viewer.platformRole === "PLATFORM_ADMIN" ||
-      (viewer.platformRole === "SCHOOL_ADMIN" && viewer.schoolAdminOfId === event.club.schoolId) ||
+      (isSchoolAdminTier(viewer.platformRole) && viewer.schoolAdminOfId === event.club.schoolId) ||
       directorClubs(viewer).some((c) => c.schoolId === event.club.schoolId));
   const canView = isSchoolStaff || (event.visibility === "PUBLIC" ? isMember : event.invites.length > 0);
   if (!canView) notFound();
+  // A pending/rejected event proposal isn't real yet as far as students are
+  // concerned — school staff can still preview it, mirroring the same
+  // carve-out isSchoolStaff already gets for a club still awaiting its own
+  // supervisor's approval.
+  if (event.approvalStatus !== "APPROVED" && !isSchoolStaff) notFound();
 
   const myRegistration = event.registrations[0];
   const registeredCount = event._count.registrations;

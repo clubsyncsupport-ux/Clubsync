@@ -9,16 +9,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ImageUploadField } from "@/components/ui/image-upload-field";
 import { ClubColorPicker } from "@/components/ui/club-color-picker";
 import { CategoryMultiSelect } from "@/components/ui/category-multi-select";
+import { GradeChipPicker } from "@/components/ui/grade-chip-picker";
 import { parseCategories } from "@/lib/categories";
 import { cn } from "@/lib/cn";
 import type { Club } from "@prisma/client";
 
-export function ClubSettingsForm({ club, takenColors }: { club: Club; takenColors: string[] }) {
+export function ClubSettingsForm({ club, takenColors, gradeLevels }: { club: Club; takenColors: string[]; gradeLevels: string[] }) {
   const boundAction = async (_prev: ActionState, formData: FormData) => updateClubSettingsAction(club.id, formData);
   const [state, formAction, pending] = useActionState(boundAction, { error: null });
   const [color, setColor] = useState(club.color);
   const [isPrivate, setIsPrivate] = useState(club.requiresApproval);
   const [categories, setCategories] = useState<string[]>(parseCategories(club.category));
+  const [allowedGrades, setAllowedGrades] = useState<string[]>(club.allowedGrades ? club.allowedGrades.split(",") : [...gradeLevels]);
+
+  function toggleGrade(g: string) {
+    setAllowedGrades((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  }
 
   return (
     <form action={formAction} className="mt-6 space-y-5">
@@ -118,6 +124,12 @@ export function ClubSettingsForm({ club, takenColors }: { club: Club; takenColor
             <Label htmlFor="meetingLocation">Meeting location</Label>
             <Input id="meetingLocation" name="meetingLocation" defaultValue={club.meetingLocation ?? ""} />
           </div>
+          {gradeLevels.length > 0 && (
+            <div>
+              <input type="hidden" name="allowedGrades" value={allowedGrades.length < gradeLevels.length ? allowedGrades.join(",") : ""} />
+              <GradeChipPicker gradeLevels={gradeLevels} selected={allowedGrades} onToggle={toggleGrade} />
+            </div>
+          )}
         </CardContent>
       </Card>
 

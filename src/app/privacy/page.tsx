@@ -175,6 +175,7 @@ export default function PrivacyPage() {
                       <tr><td>Club activity</td><td>Clubs you&rsquo;ve joined or created, your role in each (member, admin, or teacher/director), events you&rsquo;ve registered for or attended</td></tr>
                       <tr><td>Service hours</td><td>Hours logged through school events, plus any self-reported volunteer hours you submit, including your own description of the activity</td></tr>
                       <tr><td>Content you create</td><td>Club descriptions, announcements, and event details you post as a club director or officer</td></tr>
+                      <tr><td>Club chat messages</td><td>Messages, attachments, and reactions you send in a club&rsquo;s chat channels — permanently logged, and never private from that club&rsquo;s Sponsor Teacher (see <a href="#p5">Section 5</a>)</td></tr>
                       <tr><td>Basic technical data</td><td>Standard web server logs (IP address, browser type, access times) kept briefly for security and troubleshooting, not used to track you individually</td></tr>
                     </tbody>
                   </table>
@@ -209,7 +210,8 @@ export default function PrivacyPage() {
                     <tbody>
                       <tr><td>You</td><td>Everything in your own account</td></tr>
                       <tr><td>A club&rsquo;s teacher/director and admins</td><td>The membership list, attendance, and service hours for <em>that specific club only</em> — never your activity in other clubs</td></tr>
-                      <tr><td>School admins</td><td>Students and clubs at their own school only, for account and dispute support</td></tr>
+                      <tr><td>A club&rsquo;s Sponsor Teacher (Director)</td><td>Every conversation in their own club&rsquo;s chat, including channels and direct messages between other members they aren&rsquo;t personally part of — a club&rsquo;s chat is never hidden from its Sponsor Teacher</td></tr>
+                      <tr><td>School admins, Principals, and Vice Principals</td><td>Students and clubs at their own school only, for account and dispute support, plus read-only visibility into every club&rsquo;s chat at their school — they can view but never post or moderate</td></tr>
                       <tr><td>The platform administrator</td><td>Full access, for maintaining the service and responding to support requests or policy violations — see <a href="#contact">Contact</a> for who this is today</td></tr>
                     </tbody>
                   </table>

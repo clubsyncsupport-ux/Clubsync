@@ -8,6 +8,7 @@ import crypto from "crypto";
 import { requireAdmin, logAudit } from "@/lib/admin";
 import { getSchoolAdminContextForClub, requireSchoolAccessForUser, requireSchoolAccessForStaffApproval } from "@/lib/school-admin";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
+import { isSchoolAdminTier, SCHOOL_ADMIN_TIER_ROLES, type PlatformRole } from "@/lib/constants";
 
 // ---- Users ----
 // suspend/reactivate/delete are usable by a School Admin, but only against a
@@ -24,7 +25,7 @@ export async function suspendUserAction(userId: string) {
   await logAudit(me.id, "SUSPEND_USER", "User", userId);
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
-  if (me.platformRole === "SCHOOL_ADMIN" && me.schoolAdminOfId) {
+  if (isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId) {
     revalidatePath(`/school-admin/${me.schoolAdminOfId}/students`);
     revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${userId}`);
   }
@@ -36,7 +37,7 @@ export async function reactivateUserAction(userId: string) {
   await logAudit(me.id, "REACTIVATE_USER", "User", userId);
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
-  if (me.platformRole === "SCHOOL_ADMIN" && me.schoolAdminOfId) {
+  if (isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId) {
     revalidatePath(`/school-admin/${me.schoolAdminOfId}/students`);
     revalidatePath(`/school-admin/${me.schoolAdminOfId}/students/${userId}`);
   }
@@ -47,7 +48,7 @@ export async function deleteUserAction(userId: string) {
   await db.user.delete({ where: { id: userId } });
   await logAudit(me.id, "DELETE_USER", "User", userId);
   revalidatePath("/admin/users");
-  if (me.platformRole === "SCHOOL_ADMIN" && me.schoolAdminOfId) {
+  if (isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId) {
     revalidatePath(`/school-admin/${me.schoolAdminOfId}/students`);
     redirect(`/school-admin/${me.schoolAdminOfId}/students`);
   }
@@ -193,14 +194,16 @@ export async function deleteSchoolAction(schoolId: string): Promise<{ error: str
 export async function assignSchoolAdminAction(schoolId: string, _prev: SchoolFormState, formData: FormData): Promise<SchoolFormState> {
   const admin = await requireAdmin();
   const identifier = String(formData.get("identifier") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "SCHOOL_ADMIN") as PlatformRole;
   if (!identifier) return { error: "Enter an email." };
+  if (!(SCHOOL_ADMIN_TIER_ROLES as readonly string[]).includes(role)) return { error: "Invalid role." };
 
   const user = await db.user.findUnique({ where: { email: identifier } });
   if (!user) return { error: "No account found with that email." };
   if (user.platformRole === "PLATFORM_ADMIN") return { error: "That account is already a Platform Admin." };
 
-  await db.user.update({ where: { id: user.id }, data: { platformRole: "SCHOOL_ADMIN", schoolAdminOfId: schoolId } });
-  await logAudit(admin.id, "ASSIGN_SCHOOL_ADMIN", "User", user.id, undefined, { schoolId });
+  await db.user.update({ where: { id: user.id }, data: { platformRole: role, schoolAdminOfId: schoolId } });
+  await logAudit(admin.id, "ASSIGN_SCHOOL_ADMIN", "User", user.id, undefined, { schoolId, role });
   revalidatePath(`/admin/schools/${schoolId}`);
   revalidatePath("/admin/schools");
   return { error: null, success: true };
@@ -209,7 +212,7 @@ export async function assignSchoolAdminAction(schoolId: string, _prev: SchoolFor
 export async function reassignSchoolAdminAction(userId: string, newSchoolId: string) {
   const admin = await requireAdmin();
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (user.platformRole !== "SCHOOL_ADMIN") return;
+  if (!isSchoolAdminTier(user.platformRole)) return;
   const previousSchoolId = user.schoolAdminOfId;
   await db.user.update({ where: { id: userId }, data: { schoolAdminOfId: newSchoolId } });
   await logAudit(admin.id, "REASSIGN_SCHOOL_ADMIN", "User", userId, { schoolId: previousSchoolId }, { schoolId: newSchoolId });
@@ -221,7 +224,7 @@ export async function reassignSchoolAdminAction(userId: string, newSchoolId: str
 export async function removeSchoolAdminAction(userId: string) {
   const admin = await requireAdmin();
   const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
-  if (user.platformRole !== "SCHOOL_ADMIN") return;
+  if (!isSchoolAdminTier(user.platformRole)) return;
   const previousSchoolId = user.schoolAdminOfId;
   await db.user.update({ where: { id: userId }, data: { platformRole: "STUDENT", schoolAdminOfId: null } });
   await logAudit(admin.id, "REMOVE_SCHOOL_ADMIN", "User", userId, { schoolId: previousSchoolId }, undefined);
@@ -473,7 +476,7 @@ export async function previewMergeCandidateAction(targetUserId: string, email: s
   if (candidate.schoolId !== target.schoolId) return { error: "Both accounts must be at the same school." };
   // Re-verify access to the *candidate* side too — a School Admin can only ever
   // reach STUDENT accounts at their own school, same as every other admin action.
-  if (me.platformRole === "SCHOOL_ADMIN" && candidate.platformRole !== "STUDENT") {
+  if (isSchoolAdminTier(me.platformRole) && candidate.platformRole !== "STUDENT") {
     return { error: "That account can't be merged by a School Admin." };
   }
 
