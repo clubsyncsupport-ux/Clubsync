@@ -20,12 +20,13 @@ import {
 } from "date-fns";
 import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { getVisibleEvents } from "@/lib/data/calendar";
+import { getSchedulesForRange, currentSlotIndex, type TodaysSchedule } from "@/lib/bell-schedule";
 import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/cn";
 import { EventCard } from "@/components/event-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ColorDot } from "@/components/ui/badge";
 import { ClubFilterLegend } from "@/components/club-filter-legend";
 import { ConnectGoogleCalendarPrompt } from "@/components/connect-google-calendar-prompt";
@@ -38,6 +39,8 @@ type ViewType = "month" | "week" | "day" | "agenda";
 const PERSONAL_COLOR = "#6b7280";
 const SCHOOL_EVENT_COLOR = "#ca8a04";
 const SCHOOL_EVENTS_LEGEND_ID = "__school__";
+const BELL_SCHEDULE_COLOR = "#475569";
+const BELL_SCHEDULE_LEGEND_ID = "__bell__";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -69,7 +72,7 @@ export default async function CalendarPage({
     rangeEnd = addDays(refDate, 60);
   }
 
-  const [clubEvents, personalEvents, categories, googleEvents, schoolEvents] = await Promise.all([
+  const [clubEvents, personalEvents, categories, googleEvents, schoolEvents, schedules] = await Promise.all([
     clubIds.length ? getVisibleEvents(viewer.id, clubIds, rangeStart, rangeEnd) : Promise.resolve([]),
     db.personalEvent.findMany({
       where: { userId: viewer.id, startAt: { gte: rangeStart, lte: rangeEnd } },
@@ -96,6 +99,7 @@ export default async function CalendarPage({
           orderBy: { date: "asc" },
         })
       : Promise.resolve([]),
+    viewer.schoolId ? getSchedulesForRange(viewer.schoolId, rangeStart, rangeEnd) : Promise.resolve(new Map<string, TodaysSchedule>()),
   ]);
 
   const items: CalendarItem[] = [
@@ -121,6 +125,8 @@ export default async function CalendarPage({
   const clubs: { id: string; name: string; color: string }[] = viewer.memberships.map((m) => m.club);
   if (viewer.googleCalendarRefreshToken) clubs.push(googleLegendEntry());
   if (schoolEvents.length > 0) clubs.push({ id: SCHOOL_EVENTS_LEGEND_ID, name: "School Calendar", color: SCHOOL_EVENT_COLOR });
+  const hasBellSchedule = Array.from(schedules.values()).some((s) => s.status === "SCHOOL_DAY");
+  if (hasBellSchedule) clubs.push({ id: BELL_SCHEDULE_LEGEND_ID, name: "Bell Schedule", color: BELL_SCHEDULE_COLOR });
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">
@@ -178,10 +184,10 @@ export default async function CalendarPage({
       )}
 
       <div className="mt-5">
-        {view === "month" && <MonthGrid refDate={refDate} items={items} />}
-        {view === "week" && <WeekColumns refDate={refDate} items={items} />}
-        {view === "day" && <DayList refDate={refDate} items={items} />}
-        {view === "agenda" && <AgendaList items={items} />}
+        {view === "month" && <MonthGrid refDate={refDate} items={items} schedules={schedules} />}
+        {view === "week" && <WeekColumns refDate={refDate} items={items} schedules={schedules} />}
+        {view === "day" && <DayList refDate={refDate} items={items} schedules={schedules} />}
+        {view === "agenda" && <AgendaList items={items} schedules={schedules} />}
       </div>
     </div>
   );
@@ -253,7 +259,7 @@ function CalendarItemRow({ item }: { item: CalendarItem }) {
   );
 }
 
-function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] }) {
+function MonthGrid({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(refDate)), end: endOfWeek(endOfMonth(refDate)) });
   const itemsByDay = new Map<string, CalendarItem[]>();
   for (const it of items) {
@@ -275,6 +281,7 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const dayItems = itemsByDay.get(key) ?? [];
+          const schedule = schedules.get(key);
           return (
             <Link
               href={`/calendar?view=day&date=${key}`}
@@ -284,14 +291,26 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
                 !isSameMonth(day, refDate) && "bg-surface-0/50 opacity-40"
               )}
             >
-              <span
-                className={cn(
-                  "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
-                  isToday(day) ? "bg-accent text-on-accent" : "text-text-secondary"
+              <div className="flex items-center gap-1">
+                <span
+                  className={cn(
+                    "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
+                    isToday(day) ? "bg-accent text-on-accent" : "text-text-secondary"
+                  )}
+                >
+                  {format(day, "d")}
+                </span>
+                {schedule?.status === "SCHOOL_DAY" && (
+                  <span
+                    data-club-id={BELL_SCHEDULE_LEGEND_ID}
+                    title={schedule.dayLabel}
+                    className="min-w-0 truncate rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white sm:text-[10px]"
+                    style={{ backgroundColor: BELL_SCHEDULE_COLOR }}
+                  >
+                    {schedule.dayLabel === "Collaboration Day" ? "Collab" : schedule.dayLabel}
+                  </span>
                 )}
-              >
-                {format(day, "d")}
-              </span>
+              </div>
               <div className="mt-1 space-y-0.5">
                 {dayItems.slice(0, 3).map((it) => (
                   <div
@@ -320,17 +339,33 @@ function MonthGrid({ refDate, items }: { refDate: Date; items: CalendarItem[] })
   );
 }
 
-function WeekColumns({ refDate, items }: { refDate: Date; items: CalendarItem[] }) {
+function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
   const days = eachDayOfInterval({ start: startOfWeek(refDate), end: endOfWeek(refDate) });
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-7">
       {days.map((day) => {
         const dayItems = items.filter((it) => isSameDay(it.startAt, day));
+        const schedule = schedules.get(format(day, "yyyy-MM-dd"));
         return (
           <div key={day.toISOString()} className="rounded-xl border border-border p-2">
             <p className={cn("mb-2 text-center text-xs font-semibold", isToday(day) ? "text-accent" : "text-text-muted")}>
               {format(day, "EEE d")}
             </p>
+            {schedule?.status === "SCHOOL_DAY" && (
+              <div data-club-id={BELL_SCHEDULE_LEGEND_ID} className="mb-1.5 space-y-0.5 rounded-lg border border-dashed p-1.5" style={{ borderColor: BELL_SCHEDULE_COLOR }}>
+                <p className="truncate text-center text-[10px] font-semibold uppercase tracking-wide" style={{ color: BELL_SCHEDULE_COLOR }} title={schedule.dayLabel}>
+                  {schedule.dayLabel}
+                </p>
+                {schedule.slots
+                  .filter((s) => s.isBlock)
+                  .map((slot, i) => (
+                    <div key={i} className="flex items-center justify-between text-[10px] text-text-secondary">
+                      <span>Block {slot.letter}</span>
+                      <span className="tabular-nums">{slot.start}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
             <div className="space-y-1.5">
               {dayItems.length === 0 && <p className="text-center text-[11px] text-text-muted">—</p>}
               {dayItems.map((it) =>
@@ -384,25 +419,47 @@ function WeekColumns({ refDate, items }: { refDate: Date; items: CalendarItem[] 
   );
 }
 
-function DayList({ refDate, items }: { refDate: Date; items: CalendarItem[] }) {
-  const dayItems = items.filter((it) => isSameDay(it.startAt, refDate));
-  if (dayItems.length === 0) {
-    return (
-      <Card>
-        <EmptyState icon="📅" title="Nothing scheduled" description="No events on this day." />
-      </Card>
-    );
-  }
+function DayBellSchedule({ refDate, schedule }: { refDate: Date; schedule: TodaysSchedule | undefined }) {
+  if (schedule?.status !== "SCHOOL_DAY") return null;
+  const current = isToday(refDate) ? currentSlotIndex(schedule.slots, new Date()) : null;
   return (
-    <div className="space-y-2">
-      {dayItems.map((it) => (
-        <CalendarItemRow key={it.id} item={it} />
-      ))}
+    <div data-club-id={BELL_SCHEDULE_LEGEND_ID}>
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Bell Schedule</p>
+          <p className="mt-0.5 text-sm font-medium text-text-primary">{schedule.dayLabel}</p>
+          <div className="mt-3 divide-y divide-border">
+            {schedule.slots.map((slot, i) => (
+              <div key={i} className={cn("flex items-center justify-between py-1.5", i === current ? "text-accent" : "text-text-secondary")}>
+                <span className="text-sm font-medium">{slot.isBlock ? `Block ${slot.letter ?? ""}`.trim() : slot.name}</span>
+                <span className="text-xs tabular-nums">{slot.start === slot.end ? slot.start : `${slot.start} – ${slot.end}`}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function AgendaList({ items }: { items: CalendarItem[] }) {
+function DayList({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
+  const dayItems = items.filter((it) => isSameDay(it.startAt, refDate));
+  const schedule = schedules.get(format(refDate, "yyyy-MM-dd"));
+  return (
+    <div className="space-y-2">
+      <DayBellSchedule refDate={refDate} schedule={schedule} />
+      {dayItems.length === 0 ? (
+        <Card>
+          <EmptyState icon="📅" title="Nothing scheduled" description="No events on this day." />
+        </Card>
+      ) : (
+        dayItems.map((it) => <CalendarItemRow key={it.id} item={it} />)
+      )}
+    </div>
+  );
+}
+
+function AgendaList({ items, schedules }: { items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
   if (items.length === 0) {
     return (
       <Card>
@@ -418,16 +475,30 @@ function AgendaList({ items }: { items: CalendarItem[] }) {
   }
   return (
     <div className="space-y-5">
-      {Array.from(byDay.entries()).map(([key, dayItems]) => (
-        <div key={key}>
-          <p className="mb-2 text-sm font-semibold text-text-secondary">{format(parseISO(key), "EEEE, MMMM d")}</p>
-          <div className="space-y-2">
-            {dayItems.map((it) => (
-              <CalendarItemRow key={it.id} item={it} />
-            ))}
+      {Array.from(byDay.entries()).map(([key, dayItems]) => {
+        const schedule = schedules.get(key);
+        return (
+          <div key={key}>
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-secondary">
+              {format(parseISO(key), "EEEE, MMMM d")}
+              {schedule?.status === "SCHOOL_DAY" && (
+                <span
+                  data-club-id={BELL_SCHEDULE_LEGEND_ID}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
+                  style={{ backgroundColor: BELL_SCHEDULE_COLOR }}
+                >
+                  {schedule.dayLabel}
+                </span>
+              )}
+            </p>
+            <div className="space-y-2">
+              {dayItems.map((it) => (
+                <CalendarItemRow key={it.id} item={it} />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

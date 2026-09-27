@@ -9,6 +9,7 @@ import { isSchoolAdminTier, schoolAdminTierLabel } from "@/lib/constants";
 
 const STUDENT_NAV: NavItem[] = [
   { href: "/home", label: "Home", icon: "Home", exact: true },
+  { href: "/my-clubs", label: "Clubs", icon: "LayoutGrid" },
   { href: "/calendar", label: "Calendar", icon: "Calendar" },
   { href: "/service-hours", label: "Hours", icon: "Clock" },
   { href: "/discover", label: "Discover", icon: "Compass" },

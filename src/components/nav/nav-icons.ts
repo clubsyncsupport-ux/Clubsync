@@ -17,6 +17,7 @@ import {
   Phone,
   MessageCircle,
   ClipboardCheck,
+  LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
 
@@ -44,6 +45,7 @@ export const NAV_ICONS = {
   Phone,
   MessageCircle,
   ClipboardCheck,
+  LayoutGrid,
 } satisfies Record<string, LucideIcon>;
 
 export type NavIconName = keyof typeof NAV_ICONS;

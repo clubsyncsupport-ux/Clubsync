@@ -54,17 +54,7 @@ function extractLetters(title: string): string[] {
   return title.replace(/\(PLT\)/i, "").match(/[A-D]/gi)?.map((l) => l.toUpperCase()) ?? [];
 }
 
-export async function getTodaysSchedule(schoolId: string, date: Date): Promise<TodaysSchedule> {
-  const dayStart = new Date(date);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-
-  const events = await db.schoolCalendarEvent.findMany({
-    where: { schoolId, date: { gte: dayStart, lt: dayEnd } },
-    select: { title: true, category: true },
-  });
-
+function computeScheduleForDay(events: { title: string; category: string }[], date: Date): TodaysSchedule {
   const noSchool = events.find((e) => e.category === "PRO_D" || e.category === "SCHOOL_CLOSED");
   if (noSchool) return { status: "NO_SCHOOL", reason: noSchool.title };
 
@@ -86,6 +76,52 @@ export async function getTodaysSchedule(schoolId: string, date: Date): Promise<T
   // A weekday with no matching calendar data (outside the imported school
   // year, or a genuine gap) — show nothing rather than guess.
   return { status: "UNKNOWN" };
+}
+
+export async function getTodaysSchedule(schoolId: string, date: Date): Promise<TodaysSchedule> {
+  const dayStart = new Date(date);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const events = await db.schoolCalendarEvent.findMany({
+    where: { schoolId, date: { gte: dayStart, lt: dayEnd } },
+    select: { title: true, category: true },
+  });
+
+  return computeScheduleForDay(events, date);
+}
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Batched variant of getTodaysSchedule for a whole visible calendar range (a
+// month/week/agenda view) — one query for every day at once instead of one
+// query per day, keyed by the same "yyyy-MM-dd" format date-fns' `format`
+// produces so callers can look a day up with `schedules.get(format(day,
+// "yyyy-MM-dd"))`.
+export async function getSchedulesForRange(schoolId: string, start: Date, end: Date): Promise<Map<string, TodaysSchedule>> {
+  const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const rangeEndExclusive = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+
+  const events = await db.schoolCalendarEvent.findMany({
+    where: { schoolId, date: { gte: rangeStart, lt: rangeEndExclusive } },
+    select: { title: true, category: true, date: true },
+  });
+
+  const byDay = new Map<string, { title: string; category: string }[]>();
+  for (const e of events) {
+    const key = dateKey(e.date);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(e);
+  }
+
+  const result = new Map<string, TodaysSchedule>();
+  for (let d = new Date(rangeStart); d < rangeEndExclusive; d.setDate(d.getDate() + 1)) {
+    result.set(dateKey(d), computeScheduleForDay(byDay.get(dateKey(d)) ?? [], d));
+  }
+  return result;
 }
 
 // Which of today's blocks is happening right now, if any — purely for

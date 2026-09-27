@@ -21,7 +21,16 @@ function readHiddenFromStorage(storageKey: string): Set<string> {
 // passes its own storageKey so hiding a club in one context never affects
 // the other.
 export function ClubFilterLegend({ clubs, storageKey }: { clubs: { id: string; name: string; color: string }[]; storageKey: string }) {
-  const [hidden, setHidden] = useState<Set<string>>(() => readHiddenFromStorage(storageKey));
+  // Starts empty so the very first client render matches the server-rendered
+  // HTML exactly (the server always renders "nothing hidden") — reading
+  // localStorage straight into the initial state would mismatch it whenever
+  // a real value is stored, producing a hydration error that "won't be
+  // patched up" per React. The real value is loaded right after mount below.
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setHidden(readHiddenFromStorage(storageKey));
+  }, [storageKey]);
 
   // The only job of this effect is to keep the calendar's DOM (an external
   // system relative to this component) in sync with `hidden` — a textbook
