@@ -10,6 +10,7 @@ import { RecurringSeriesJoin } from "@/components/recurring-series-join";
 import { ShareButton } from "@/components/share-button";
 import { BackButton } from "@/components/ui/back-button";
 import { formatTimeRange } from "@/lib/format";
+import { toSchoolZone } from "@/lib/school-time";
 import { parseReminderOffsets, isSchoolAdminTier } from "@/lib/constants";
 import { format } from "date-fns";
 
@@ -93,7 +94,7 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
 
       <Card className="mt-5">
         <CardContent className="p-5 space-y-4">
-          <InfoRow icon="📅" label={format(event.startAt, "EEEE, MMMM d, yyyy")} sub={formatTimeRange(event.startAt, event.endAt)} />
+          <InfoRow icon="📅" label={format(toSchoolZone(event.startAt), "EEEE, MMMM d, yyyy")} sub={formatTimeRange(event.startAt, event.endAt)} />
           {(event.building || event.room || event.address) && (
             <InfoRow icon="📍" label={[event.building, event.room].filter(Boolean).join(", ") || "Location"} sub={event.address ?? undefined} />
           )}

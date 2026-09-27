@@ -10,7 +10,6 @@ import {
   format,
   isSameDay,
   isSameMonth,
-  isToday,
   parseISO,
   startOfDay,
   startOfMonth,
@@ -21,6 +20,7 @@ import {
 import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { getVisibleEvents } from "@/lib/data/calendar";
 import { getSchedulesForRange, currentSlotIndex, type TodaysSchedule } from "@/lib/bell-schedule";
+import { schoolNow, toSchoolZone } from "@/lib/school-time";
 import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/cn";
@@ -51,7 +51,7 @@ export default async function CalendarPage({
 }) {
   const { view: rawView, date: rawDate } = await searchParams;
   const view: ViewType = (["month", "week", "day", "agenda"] as const).includes(rawView as ViewType) ? (rawView as ViewType) : "month";
-  const refDate = rawDate ? startOfDay(parseISO(rawDate)) : startOfDay(new Date());
+  const refDate = rawDate ? startOfDay(parseISO(rawDate)) : startOfDay(schoolNow());
 
   const viewer = requireStudentViewer(await getViewer());
   const clubIds = viewer.memberships.map((m) => m.clubId);
@@ -145,7 +145,7 @@ export default async function CalendarPage({
           <Link href={nextHref} className="rounded-lg border border-border px-2.5 py-1.5 text-text-secondary hover:bg-surface-2">
             ›
           </Link>
-          <Link href={`/calendar?view=${view}&date=${format(new Date(), "yyyy-MM-dd")}`} className="ml-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:bg-surface-2">
+          <Link href={`/calendar?view=${view}&date=${format(schoolNow(), "yyyy-MM-dd")}`} className="ml-1 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-secondary hover:bg-surface-2">
             Today
           </Link>
         </div>
@@ -253,17 +253,18 @@ function CalendarItemRow({ item }: { item: CalendarItem }) {
           <span className="truncate">{label}</span>
         </div>
         <p className="mt-0.5 truncate font-semibold text-text-primary">{item.title}</p>
-        <p className="mt-0.5 text-sm text-text-secondary">{format(item.startAt, "MMM d, h:mm a")}</p>
+        <p className="mt-0.5 text-sm text-text-secondary">{format(toSchoolZone(item.startAt), "MMM d, h:mm a")}</p>
       </div>
     </div>
   );
 }
 
 function MonthGrid({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
+  const now = schoolNow();
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(refDate)), end: endOfWeek(endOfMonth(refDate)) });
   const itemsByDay = new Map<string, CalendarItem[]>();
   for (const it of items) {
-    const key = format(it.startAt, "yyyy-MM-dd");
+    const key = format(toSchoolZone(it.startAt), "yyyy-MM-dd");
     if (!itemsByDay.has(key)) itemsByDay.set(key, []);
     itemsByDay.get(key)!.push(it);
   }
@@ -295,7 +296,7 @@ function MonthGrid({ refDate, items, schedules }: { refDate: Date; items: Calend
                 <span
                   className={cn(
                     "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
-                    isToday(day) ? "bg-accent text-on-accent" : "text-text-secondary"
+                    isSameDay(day, now) ? "bg-accent text-on-accent" : "text-text-secondary"
                   )}
                 >
                   {format(day, "d")}
@@ -340,15 +341,16 @@ function MonthGrid({ refDate, items, schedules }: { refDate: Date; items: Calend
 }
 
 function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
+  const now = schoolNow();
   const days = eachDayOfInterval({ start: startOfWeek(refDate), end: endOfWeek(refDate) });
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-7">
       {days.map((day) => {
-        const dayItems = items.filter((it) => isSameDay(it.startAt, day));
+        const dayItems = items.filter((it) => isSameDay(toSchoolZone(it.startAt), day));
         const schedule = schedules.get(format(day, "yyyy-MM-dd"));
         return (
           <div key={day.toISOString()} className="rounded-xl border border-border p-2">
-            <p className={cn("mb-2 text-center text-xs font-semibold", isToday(day) ? "text-accent" : "text-text-muted")}>
+            <p className={cn("mb-2 text-center text-xs font-semibold", isSameDay(day, now) ? "text-accent" : "text-text-muted")}>
               {format(day, "EEE d")}
             </p>
             {schedule?.status === "SCHOOL_DAY" && (
@@ -378,7 +380,7 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
                     style={{ backgroundColor: it.color }}
                     title={it.title}
                   >
-                    {format(it.startAt, "h:mm a")} {it.title}
+                    {format(toSchoolZone(it.startAt), "h:mm a")} {it.title}
                   </Link>
                 ) : it.kind === "google" ? (
                   <div
@@ -388,7 +390,7 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
                     style={{ backgroundColor: it.color, color: "#111827" }}
                     title={it.title}
                   >
-                    {format(it.startAt, "h:mm a")} {it.title}
+                    {format(toSchoolZone(it.startAt), "h:mm a")} {it.title}
                   </div>
                 ) : it.kind === "school" ? (
                   <div
@@ -407,7 +409,7 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
                     style={{ backgroundColor: it.color }}
                     title={it.title}
                   >
-                    {format(it.startAt, "h:mm a")} {it.title}
+                    {format(toSchoolZone(it.startAt), "h:mm a")} {it.title}
                   </div>
                 )
               )}
@@ -421,7 +423,8 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
 
 function DayBellSchedule({ refDate, schedule }: { refDate: Date; schedule: TodaysSchedule | undefined }) {
   if (schedule?.status !== "SCHOOL_DAY") return null;
-  const current = isToday(refDate) ? currentSlotIndex(schedule.slots, new Date()) : null;
+  const now = schoolNow();
+  const current = isSameDay(refDate, now) ? currentSlotIndex(schedule.slots, now) : null;
   return (
     <div data-club-id={BELL_SCHEDULE_LEGEND_ID}>
       <Card>
@@ -443,7 +446,7 @@ function DayBellSchedule({ refDate, schedule }: { refDate: Date; schedule: Today
 }
 
 function DayList({ refDate, items, schedules }: { refDate: Date; items: CalendarItem[]; schedules: Map<string, TodaysSchedule> }) {
-  const dayItems = items.filter((it) => isSameDay(it.startAt, refDate));
+  const dayItems = items.filter((it) => isSameDay(toSchoolZone(it.startAt), refDate));
   const schedule = schedules.get(format(refDate, "yyyy-MM-dd"));
   return (
     <div className="space-y-2">
@@ -469,7 +472,7 @@ function AgendaList({ items, schedules }: { items: CalendarItem[]; schedules: Ma
   }
   const byDay = new Map<string, CalendarItem[]>();
   for (const it of items) {
-    const key = format(it.startAt, "yyyy-MM-dd");
+    const key = format(toSchoolZone(it.startAt), "yyyy-MM-dd");
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(it);
   }

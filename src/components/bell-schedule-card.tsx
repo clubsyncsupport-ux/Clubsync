@@ -1,13 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { getTodaysSchedule, currentSlotIndex } from "@/lib/bell-schedule";
 import { format } from "date-fns";
+import { schoolNow } from "@/lib/school-time";
 
 // Today's bell schedule, styled after the school's own "My School App"
 // widget — a plain glance-info card, no reminders/notifications wired to it
 // (explicitly not wanted by default; a per-user opt-in would be a separate,
 // later addition, not this card's job).
 export async function BellScheduleCard({ schoolId }: { schoolId: string }) {
-  const now = new Date();
+  const now = schoolNow();
   const schedule = await getTodaysSchedule(schoolId, now);
 
   if (schedule.status === "UNKNOWN") return null;

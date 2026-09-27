@@ -10,15 +10,23 @@ import { EventCard } from "@/components/event-card";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { BellScheduleCard } from "@/components/bell-schedule-card";
-import { Compass, Calendar as CalendarIcon, Clock, Ticket, Users, type LucideIcon } from "lucide-react";
+import { schoolNow, fromSchoolZone } from "@/lib/school-time";
+import { Compass, Calendar as CalendarIcon, Clock, Ticket, Users, MessageCircle, type LucideIcon } from "lucide-react";
 
 export const metadata: Metadata = { title: "Home" };
 
 export default async function HomePage() {
   const viewer = requireStudentViewer(await getViewer());
+  // `now` must be the real instant (for filtering real startAt timestamps —
+  // "gte: now" needs a true absolute cutoff, not the school's wall-clock
+  // reading of it). `todayEnd` is derived from the school's own wall clock
+  // (so "today" means the Pacific calendar day, not the server's, which
+  // Vercel defaults to UTC) and converted back to a real instant before
+  // it's used in the same query.
   const now = new Date();
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const zonedTodayEnd = schoolNow();
+  zonedTodayEnd.setHours(23, 59, 59, 999);
+  const todayEnd = fromSchoolZone(zonedTodayEnd);
 
   const clubIds = viewer.memberships.map((m) => m.clubId);
 
@@ -142,6 +150,7 @@ export default async function HomePage() {
           <QuickAction href="/calendar" icon={CalendarIcon} label="View Calendar" />
           <QuickAction href="/service-hours" icon={Clock} label="Service Hours" />
           <QuickAction href="/my-events" icon={Ticket} label="My Events" />
+          <QuickAction href="/chats" icon={MessageCircle} label="Chats" />
         </div>
       </div>
     </div>

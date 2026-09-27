@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeRange } from "@/lib/format";
+import { toSchoolZone } from "@/lib/school-time";
 import { format } from "date-fns";
 import { ChecklistSection } from "./checklist-section";
 import { AttachmentsSection } from "./attachments-section";
@@ -51,7 +52,7 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">{event.title}</h1>
             <p className="mt-1 text-[15px] text-text-secondary">
-              {format(event.startAt, "EEEE, MMMM d, yyyy")} · {formatTimeRange(event.startAt, event.endAt)}
+              {format(toSchoolZone(event.startAt), "EEEE, MMMM d, yyyy")} · {formatTimeRange(event.startAt, event.endAt)}
             </p>
           </div>
           <Badge tone={event.status === "FINALIZED" ? "success" : event.status === "CANCELLED" ? "neutral" : "accent"}>{event.status}</Badge>

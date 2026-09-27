@@ -29,6 +29,7 @@ export function ClubFilterLegend({ clubs, storageKey }: { clubs: { id: string; n
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHidden(readHiddenFromStorage(storageKey));
   }, [storageKey]);
 

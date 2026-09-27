@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek } from "date-fns";
+import { eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, parseISO, startOfMonth, startOfWeek } from "date-fns";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
+import { schoolNow, toSchoolZone } from "@/lib/school-time";
 
 // White — reserved app-wide (never a pickable club color, see CLUB_COLOR_PALETTE).
 export const GOOGLE_CALENDAR_COLOR = "#ffffff";
@@ -31,10 +32,11 @@ export function AllClubsMonthGrid({
   const days = eachDayOfInterval({ start: startOfWeek(startOfMonth(refDate)), end: endOfWeek(endOfMonth(refDate)) });
   const itemsByDay = new Map<string, AllClubsCalendarItem[]>();
   for (const it of items) {
-    const key = format(it.event.startAt, "yyyy-MM-dd");
+    const key = format(toSchoolZone(it.event.startAt), "yyyy-MM-dd");
     if (!itemsByDay.has(key)) itemsByDay.set(key, []);
     itemsByDay.get(key)!.push(it);
   }
+  const now = schoolNow();
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border">
@@ -49,7 +51,7 @@ export function AllClubsMonthGrid({
         {days.map((day) => {
           const key = format(day, "yyyy-MM-dd");
           const dayItems = itemsByDay.get(key) ?? [];
-          const clubTimes = dayItems.filter((it) => it.kind === "club").map((it) => format(it.event.startAt, "HH:mm"));
+          const clubTimes = dayItems.filter((it) => it.kind === "club").map((it) => format(toSchoolZone(it.event.startAt), "HH:mm"));
           const hasConflict = clubTimes.length > 1 && new Set(clubTimes).size < clubTimes.length;
           return (
             <div
@@ -63,7 +65,7 @@ export function AllClubsMonthGrid({
                 <span
                   className={cn(
                     "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium",
-                    isToday(day) ? "bg-accent text-on-accent" : "text-text-secondary"
+                    isSameDay(day, now) ? "bg-accent text-on-accent" : "text-text-secondary"
                   )}
                 >
                   {format(day, "d")}
@@ -77,21 +79,21 @@ export function AllClubsMonthGrid({
                       key={it.event.id}
                       href={eventHref(it.event)}
                       data-club-id={it.event.club.id}
-                      title={`${it.event.club.name} · ${format(it.event.startAt, "h:mm a")} — ${it.event.title}`}
+                      title={`${it.event.club.name} · ${format(toSchoolZone(it.event.startAt), "h:mm a")} — ${it.event.title}`}
                       className="block truncate rounded px-1 py-0.5 text-[10px] font-medium text-white hover:opacity-80 sm:text-[11px]"
                       style={{ backgroundColor: it.event.club.color }}
                     >
-                      {format(it.event.startAt, "h:mm a")} {it.event.title}
+                      {format(toSchoolZone(it.event.startAt), "h:mm a")} {it.event.title}
                     </Link>
                   ) : (
                     <div
                       key={it.event.id}
                       data-club-id={GOOGLE_CALENDAR_LEGEND_ID}
-                      title={`My Google Calendar · ${format(it.event.startAt, "h:mm a")} — ${it.event.title}`}
+                      title={`My Google Calendar · ${format(toSchoolZone(it.event.startAt), "h:mm a")} — ${it.event.title}`}
                       className="truncate rounded border border-dashed border-black/15 px-1 py-0.5 text-[10px] font-medium sm:text-[11px]"
                       style={{ backgroundColor: GOOGLE_CALENDAR_COLOR, color: "#111827" }}
                     >
-                      {format(it.event.startAt, "h:mm a")} {it.event.title}
+                      {format(toSchoolZone(it.event.startAt), "h:mm a")} {it.event.title}
                     </div>
                   )
                 )}
@@ -121,7 +123,7 @@ export function AllClubsAgendaList({
   }
   const byDay = new Map<string, AllClubsCalendarItem[]>();
   for (const it of items) {
-    const key = format(it.event.startAt, "yyyy-MM-dd");
+    const key = format(toSchoolZone(it.event.startAt), "yyyy-MM-dd");
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(it);
   }
@@ -140,7 +142,7 @@ export function AllClubsAgendaList({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-text-primary">{it.event.title}</p>
                         <p className="text-xs text-text-secondary">
-                          {it.event.club.name} · {format(it.event.startAt, "h:mm a")}
+                          {it.event.club.name} · {format(toSchoolZone(it.event.startAt), "h:mm a")}
                         </p>
                       </div>
                     </div>
@@ -154,7 +156,7 @@ export function AllClubsAgendaList({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-text-primary">{it.event.title}</p>
                         <p className="text-xs text-text-secondary">
-                          My Google Calendar · {format(it.event.startAt, "h:mm a")}
+                          My Google Calendar · {format(toSchoolZone(it.event.startAt), "h:mm a")}
                         </p>
                       </div>
                     </div>

@@ -1,6 +1,7 @@
 import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { format } from "date-fns";
+import { toSchoolZone } from "@/lib/school-time";
 
 function csvEscape(value: string): string {
   if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -16,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ clubId:
     include: {
       registrations: {
         where: { status: { in: ["REGISTERED", "WAITLISTED", "ATTENDED", "NO_SHOW"] } },
-        include: { user: true },
+        include: { user: { select: { firstName: true, lastName: true, grade: true } } },
         orderBy: { user: { firstName: "asc" } },
       },
     },
@@ -36,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ clubId:
   ]);
 
   const csv = [header, ...rows].map((row) => row.map((cell) => csvEscape(String(cell))).join(",")).join("\n");
-  const filename = `${event.title.replace(/[^a-z0-9]+/gi, "-")}-attendance-${format(event.startAt, "yyyy-MM-dd")}.csv`;
+  const filename = `${event.title.replace(/[^a-z0-9]+/gi, "-")}-attendance-${format(toSchoolZone(event.startAt), "yyyy-MM-dd")}.csv`;
 
   return new Response(csv, {
     headers: {

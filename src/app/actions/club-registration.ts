@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getDirectorContext } from "@/lib/director";
 import { initialApprovalStatus, notifySchoolAdmins } from "@/lib/approvals";
 import { schoolYearFor } from "@/lib/school-year";
+import { schoolNow } from "@/lib/school-time";
 
 export type ActionState = { error: string | null; success?: boolean };
 
@@ -17,7 +18,7 @@ export async function submitClubRegistrationAction(clubId: string, _prev: Action
   const fundraisingGuidelines = String(formData.get("fundraisingGuidelines") ?? "").trim() || null;
   if (!description) return { error: "Description is required." };
 
-  const schoolYear = schoolYearFor(new Date());
+  const schoolYear = schoolYearFor(schoolNow());
   const existing = await db.clubRegistration.findUnique({ where: { clubId_schoolYear: { clubId, schoolYear } } });
   if (existing) return { error: `A registration for ${schoolYear} already exists.` };
 

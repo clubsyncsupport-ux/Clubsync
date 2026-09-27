@@ -2,7 +2,7 @@ import Link from "next/link";
 import { DesktopNavLinks, BottomNavLinks, type NavItem } from "./nav-links";
 import { ProfileSwitcher } from "./profile-switcher";
 import { NotificationBell } from "./notification-bell";
-import { Bell } from "lucide-react";
+import { Bell, MessageCircle } from "lucide-react";
 import type { ActiveProfile } from "@/lib/auth/session";
 
 export function AppShell({
@@ -69,6 +69,16 @@ export function AppShell({
           <BottomNavLinks items={navItems} />
         </div>
       </div>
+
+      {!isStaff && (
+        <Link
+          href="/chats"
+          aria-label="Chats"
+          className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-on-accent shadow-[var(--shadow-lg)] transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
+        >
+          <MessageCircle className="h-6 w-6" strokeWidth={2} />
+        </Link>
+      )}
     </div>
   );
 }

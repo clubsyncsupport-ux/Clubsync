@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { schoolYearFor } from "@/lib/school-year";
+import { schoolNow } from "@/lib/school-time";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RegistrationForm } from "./registration-form";
@@ -12,7 +13,7 @@ export default async function ClubRegistrationPage({ params }: { params: Promise
   const { clubId } = await params;
   await getDirectorContext(clubId);
 
-  const schoolYear = schoolYearFor(new Date());
+  const schoolYear = schoolYearFor(schoolNow());
   const [current, prior] = await Promise.all([
     db.clubRegistration.findUnique({ where: { clubId_schoolYear: { clubId, schoolYear } } }),
     db.clubRegistration.findFirst({ where: { clubId, schoolYear: { not: schoolYear } }, orderBy: { schoolYear: "desc" } }),

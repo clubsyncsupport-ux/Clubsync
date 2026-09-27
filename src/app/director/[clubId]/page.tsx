@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatEventDate, timeAgo } from "@/lib/format";
 import { greeting } from "@/lib/format";
 import { schoolYearFor } from "@/lib/school-year";
+import { schoolNow } from "@/lib/school-time";
 import { Plus, Megaphone, Users, Shield, CalendarDays, BarChart3, type LucideIcon } from "lucide-react";
 
 export async function generateMetadata({ params }: { params: Promise<{ clubId: string }> }): Promise<Metadata> {
@@ -20,7 +21,7 @@ export default async function DirectorDashboardPage({ params }: { params: Promis
   const { clubId } = await params;
   const { club, user } = await getDirectorContext(clubId);
 
-  const schoolYear = schoolYearFor(new Date());
+  const schoolYear = schoolYearFor(schoolNow());
   const [memberCount, upcomingEvents, pendingApprovals, pendingServiceHours, recentAnnouncements, nextEvent, pendingSupervisor, currentRegistration] =
     await Promise.all([
       db.clubMembership.count({ where: { clubId, status: "ACTIVE" } }),

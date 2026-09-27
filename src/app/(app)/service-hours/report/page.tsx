@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { format } from "date-fns";
+import { schoolNow, toSchoolZone } from "@/lib/school-time";
 import { PrintButton } from "./print-button";
 
 export const metadata: Metadata = { title: "Service Hour Report" };
@@ -10,7 +11,7 @@ export default async function ServiceHourReportPage() {
   const viewer = requireStudentViewer(await getViewer());
   const records = await db.serviceHourRecord.findMany({
     where: { userId: viewer.id, status: "VERIFIED" },
-    include: { club: true, event: true, approvedBy: true },
+    include: { club: true, event: true },
     orderBy: { createdAt: "asc" },
   });
   const achievements = await db.userAchievement.findMany({ where: { userId: viewer.id }, include: { achievement: true } });
@@ -89,7 +90,7 @@ export default async function ServiceHourReportPage() {
             <tbody>
               {records.map((r) => (
                 <tr key={r.id} className="border-b border-border align-top">
-                  <td className="py-1.5 text-text-secondary">{format(r.createdAt, "MMM d, yyyy")}</td>
+                  <td className="py-1.5 text-text-secondary">{format(toSchoolZone(r.createdAt), "MMM d, yyyy")}</td>
                   <td className="py-1.5 text-text-primary">{r.club?.name ?? r.organizationName ?? "Self-reported"}</td>
                   <td className="py-1.5 text-text-primary">
                     {r.event?.title ?? r.taskDescription}
@@ -115,7 +116,7 @@ export default async function ServiceHourReportPage() {
           The volunteer and service hours contained within this report have been verified and approved by the respective club
           directors through the ClubSync platform.
         </div>
-        <p className="mt-3 text-center text-[11px] text-text-muted">Generated on {format(new Date(), "MMMM d, yyyy")}</p>
+        <p className="mt-3 text-center text-[11px] text-text-muted">Generated on {format(schoolNow(), "MMMM d, yyyy")}</p>
       </div>
     </div>
   );

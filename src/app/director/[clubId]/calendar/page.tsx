@@ -4,6 +4,7 @@ import { addDays, addMonths, endOfMonth, endOfWeek, format, parseISO, startOfDay
 import { getDirectorContext } from "@/lib/director";
 import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
+import { schoolNow } from "@/lib/school-time";
 import { cn } from "@/lib/cn";
 import { ClubFilterLegend } from "@/components/club-filter-legend";
 import { ConnectGoogleCalendarPrompt } from "@/components/connect-google-calendar-prompt";
@@ -29,7 +30,7 @@ export default async function AllClubsCalendarPage({
   const { club, user } = await getDirectorContext(clubId);
   const { view: rawView, date: rawDate } = await searchParams;
   const view: ViewType = rawView === "agenda" ? "agenda" : "month";
-  const refDate = rawDate ? startOfDay(parseISO(rawDate)) : startOfDay(new Date());
+  const refDate = rawDate ? startOfDay(parseISO(rawDate)) : startOfDay(schoolNow());
 
   const rangeStart = view === "month" ? startOfWeek(startOfMonth(refDate)) : refDate;
   const rangeEnd = view === "month" ? endOfWeek(endOfMonth(refDate)) : addDays(refDate, 45);
@@ -81,7 +82,7 @@ export default async function AllClubsCalendarPage({
 
   const prevHref = `/director/${clubId}/calendar?view=${view}&date=${format(subMonths(refDate, 1), "yyyy-MM-dd")}`;
   const nextHref = `/director/${clubId}/calendar?view=${view}&date=${format(addMonths(refDate, 1), "yyyy-MM-dd")}`;
-  const todayHref = `/director/${clubId}/calendar?view=${view}&date=${format(new Date(), "yyyy-MM-dd")}`;
+  const todayHref = `/director/${clubId}/calendar?view=${view}&date=${format(schoolNow(), "yyyy-MM-dd")}`;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">

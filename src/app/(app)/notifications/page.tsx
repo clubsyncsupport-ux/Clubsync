@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { isToday, isYesterday, isThisWeek } from "date-fns";
+import { isSameDay, isSameWeek, subDays } from "date-fns";
 import { getViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { timeAgo } from "@/lib/format";
+import { schoolNow, toSchoolZone } from "@/lib/school-time";
 import { openNotificationAction, deleteNotificationAction } from "@/app/actions/notifications";
 import { MarkAllReadOnView } from "./mark-all-read-on-view";
 
@@ -27,11 +28,16 @@ export default async function NotificationsPage() {
     take: 100,
   });
 
+  const now = schoolNow();
+  const yesterday = subDays(now, 1);
+  const isToday = (n: (typeof notifications)[number]) => isSameDay(toSchoolZone(n.createdAt), now);
+  const isYesterday = (n: (typeof notifications)[number]) => isSameDay(toSchoolZone(n.createdAt), yesterday);
+  const isThisWeek = (n: (typeof notifications)[number]) => isSameWeek(toSchoolZone(n.createdAt), now);
   const groups: { label: string; items: typeof notifications }[] = [
-    { label: "Today", items: notifications.filter((n) => isToday(n.createdAt)) },
-    { label: "Yesterday", items: notifications.filter((n) => isYesterday(n.createdAt)) },
-    { label: "Earlier This Week", items: notifications.filter((n) => !isToday(n.createdAt) && !isYesterday(n.createdAt) && isThisWeek(n.createdAt)) },
-    { label: "Earlier", items: notifications.filter((n) => !isThisWeek(n.createdAt)) },
+    { label: "Today", items: notifications.filter(isToday) },
+    { label: "Yesterday", items: notifications.filter(isYesterday) },
+    { label: "Earlier This Week", items: notifications.filter((n) => !isToday(n) && !isYesterday(n) && isThisWeek(n)) },
+    { label: "Earlier", items: notifications.filter((n) => !isThisWeek(n)) },
   ].filter((g) => g.items.length > 0);
 
   return (

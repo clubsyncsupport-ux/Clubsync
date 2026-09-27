@@ -107,3 +107,70 @@ export async function getVisibleChannels(clubId: string, userId: string, chatRol
     orderBy: { createdAt: "asc" },
   });
 }
+
+function hubChannelDisplayName(name: string | null, memberships: { userId: string; user: { firstName: string; lastName: string } }[], myUserId: string): string {
+  if (name) return name;
+  const others = memberships.filter((m) => m.userId !== myUserId);
+  return others.map((m) => `${m.user.firstName} ${m.user.lastName[0]}.`).join(", ") || "Direct Message";
+}
+
+export type ChatHubChannel = {
+  id: string;
+  clubId: string;
+  clubName: string;
+  clubSlug: string;
+  clubColor: string;
+  displayName: string;
+  isDirect: boolean;
+  lastMessage: { body: string; createdAt: Date } | null;
+};
+
+// The "Chats" hub — every channel the student can see across every club
+// they're an active member of, one query instead of one per club, sorted by
+// most recent activity so the busiest conversations surface first. Only
+// ever called with the caller's own memberships (never OVERSIGHT — that's
+// for admins watching from outside a club they don't belong to, which has
+// no meaning for "my own chats").
+export async function getChatHubChannels(
+  memberships: { clubId: string; role: string; club: { name: string; slug: string; color: string } }[],
+  userId: string
+): Promise<ChatHubChannel[]> {
+  const clubIds = memberships.map((m) => m.clubId);
+  if (clubIds.length === 0) return [];
+  const roleByClub = new Map(memberships.map((m) => [m.clubId, m.role]));
+  const clubInfoById = new Map(memberships.map((m) => [m.clubId, m.club]));
+
+  const channels = await db.channel.findMany({
+    where: {
+      clubId: { in: clubIds },
+      OR: [
+        { visibility: { in: ["OPEN", "REQUEST"] } },
+        { visibility: "INVITE", memberships: { some: { userId, status: "ACTIVE" } } },
+        { visibility: "DIRECT", memberships: { some: { userId, status: "ACTIVE" } } },
+      ],
+    },
+    include: {
+      memberships: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } },
+      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, filteredBody: true, createdAt: true } },
+    },
+  });
+
+  return channels
+    .map((c): ChatHubChannel => {
+      const role = roleByClub.get(c.clubId)!;
+      const showRealText = role === "DIRECTOR"; // the club's Sponsor Teacher always sees the real, unfiltered text
+      const last = c.messages[0];
+      const club = clubInfoById.get(c.clubId)!;
+      return {
+        id: c.id,
+        clubId: c.clubId,
+        clubName: club.name,
+        clubSlug: club.slug,
+        clubColor: club.color,
+        displayName: hubChannelDisplayName(c.name, c.memberships, userId),
+        isDirect: c.visibility === "DIRECT",
+        lastMessage: last ? { body: showRealText ? last.body : (last.filteredBody ?? last.body), createdAt: last.createdAt } : null,
+      };
+    })
+    .sort((a, b) => (b.lastMessage?.createdAt.getTime() ?? 0) - (a.lastMessage?.createdAt.getTime() ?? 0));
+}
