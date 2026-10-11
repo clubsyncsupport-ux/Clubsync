@@ -186,3 +186,70 @@ export async function updateClubSettingsAction(clubId: string, formData: FormDat
   revalidatePath(`/clubs`);
   return { error: null, success: true };
 }
+
+const NOT_APPROVED_TEACHER = ["PENDING", "REJECTED"];
+
+// A club can have more than one sponsor teacher. Co-sponsors have every
+// Director power (approvals, members, events, chat) — only an existing Director
+// (or a school/platform admin) can add one, and only a teacher at this club's
+// school whose own account is approved.
+export async function addCoSponsorAction(clubId: string, teacherUserId: string): Promise<ActionState> {
+  const { club, isDirector, user } = await getDirectorContext(clubId);
+  if (!isDirector) return { error: "Only the club's Sponsor Teacher can add a co-sponsor." };
+
+  const teacher = await db.user.findUnique({
+    where: { id: teacherUserId },
+    select: { id: true, accountKind: true, schoolId: true, staffApprovalStatus: true, firstName: true, lastName: true },
+  });
+  if (!teacher || teacher.accountKind !== "STAFF" || teacher.schoolId !== club.schoolId || NOT_APPROVED_TEACHER.includes(teacher.staffApprovalStatus ?? "")) {
+    return { error: "Pick an approved teacher at this school." };
+  }
+
+  await db.clubMembership.upsert({
+    where: { userId_clubId: { userId: teacher.id, clubId } },
+    update: { role: "DIRECTOR", status: "ACTIVE" },
+    create: { userId: teacher.id, clubId, role: "DIRECTOR", status: "ACTIVE" },
+  });
+  // Joins the club's General and Announcements channels, and may post announcements.
+  await ensureDefaultChannels(clubId);
+  if (teacher.id !== user.id) {
+    await db.notification.create({
+      data: {
+        userId: teacher.id,
+        type: "PLATFORM",
+        title: "You're now a sponsor teacher",
+        body: `You were added as a sponsor teacher of ${club.name}.`,
+        linkUrl: `/director/${clubId}`,
+      },
+    });
+  }
+
+  revalidatePath(`/director/${clubId}/members`);
+  revalidatePath(`/director/${clubId}`);
+  revalidatePath("/teacher");
+  return { error: null, success: true };
+}
+
+// Takes a sponsor off the club (a teacher can also step down themselves). A
+// club always keeps at least one Director.
+export async function removeCoSponsorAction(clubId: string, membershipId: string): Promise<ActionState> {
+  const { isDirector } = await getDirectorContext(clubId);
+  if (!isDirector) return { error: "Only the club's Sponsor Teacher can do this." };
+
+  const [target, directorCount] = await Promise.all([
+    db.clubMembership.findUnique({ where: { id: membershipId } }),
+    db.clubMembership.count({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" } }),
+  ]);
+  if (!target || target.clubId !== clubId || target.role !== "DIRECTOR") return { error: "That person isn't a sponsor teacher of this club." };
+  if (directorCount <= 1) return { error: "A club needs at least one sponsor teacher. Add another before removing this one." };
+
+  await db.$transaction([
+    db.clubMembership.delete({ where: { id: membershipId } }),
+    db.channelMembership.deleteMany({ where: { userId: target.userId, channel: { clubId } } }),
+  ]);
+
+  revalidatePath(`/director/${clubId}/members`);
+  revalidatePath(`/director/${clubId}`);
+  revalidatePath("/teacher");
+  return { error: null, success: true };
+}

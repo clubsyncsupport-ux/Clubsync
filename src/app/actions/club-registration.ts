@@ -41,16 +41,16 @@ export async function submitClubRegistrationAction(clubId: string, _prev: Action
   });
 
   if (status === "PENDING_SPONSOR") {
-    const director = await db.clubMembership.findFirst({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" } });
-    if (director) {
-      await db.notification.create({
-        data: {
-          userId: director.userId,
+    const sponsors = await db.clubMembership.findMany({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" }, select: { userId: true } });
+    if (sponsors.length > 0) {
+      await db.notification.createMany({
+        data: sponsors.map((s) => ({
+          userId: s.userId,
           type: "CLUB_REGISTRATION",
           title: "Club registration needs your sign-off",
           body: `${club.name}'s ${schoolYear} registration needs your approval as Sponsor Teacher.`,
           linkUrl: `/director/${clubId}/registration`,
-        },
+        })),
       });
     }
   } else {

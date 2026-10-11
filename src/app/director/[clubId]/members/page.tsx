@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MemberRow } from "./member-row";
+import { CoSponsors } from "./co-sponsors";
 import { ManageGroups } from "./manage-groups";
 import { schoolGradeLevels } from "@/lib/grades";
 
@@ -18,13 +19,13 @@ export default async function DirectorMembersPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { clubId } = await params;
-  const { isDirector, club } = await getDirectorContext(clubId);
+  const { isDirector, club, user } = await getDirectorContext(clubId);
   const { q } = await searchParams;
 
   const school = await db.school.findUniqueOrThrow({ where: { id: club.schoolId } });
   const gradeLevels = schoolGradeLevels(school);
 
-  const [memberships, allMembersForGroups, groups] = await Promise.all([
+  const [memberships, allMembersForGroups, groups, teacherCandidates, sponsorMemberships] = await Promise.all([
     db.clubMembership.findMany({
       where: {
         clubId,
@@ -41,6 +42,29 @@ export default async function DirectorMembersPage({
       orderBy: { user: { firstName: "asc" } },
     }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
+    // Approved teachers at this school who aren't already sponsoring this club
+    // (name only — the picker needs nothing else). A teacher with no approval
+    // status on file (older accounts) counts as approved.
+    isDirector
+      ? db.user.findMany({
+          where: {
+            schoolId: club.schoolId,
+            accountKind: "STAFF",
+            OR: [{ staffApprovalStatus: null }, { staffApprovalStatus: { notIn: ["PENDING", "REJECTED"] } }],
+            memberships: { none: { clubId, role: "DIRECTOR" } },
+          },
+          select: { id: true, firstName: true, lastName: true },
+          orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+        })
+      : Promise.resolve([]),
+    // The sponsor list ignores the search box, so searching never hides a sponsor.
+    isDirector
+      ? db.clubMembership.findMany({
+          where: { clubId, role: "DIRECTOR", status: "ACTIVE" },
+          select: { id: true, userId: true, user: { select: { firstName: true, lastName: true } } },
+          orderBy: { joinedAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const groupsByUserId = new Map<string, { name: string; color: string }[]>();
@@ -140,6 +164,14 @@ export default async function DirectorMembersPage({
           </div>
         )}
       </div>
+
+      {isDirector && (
+        <CoSponsors
+          clubId={clubId}
+          sponsors={sponsorMemberships.map((m) => ({ membershipId: m.id, name: `${m.user.firstName} ${m.user.lastName}`, isYou: m.userId === user.id }))}
+          candidates={teacherCandidates.map((t) => ({ id: t.id, name: `${t.firstName} ${t.lastName}` }))}
+        />
+      )}
 
       {isDirector && (
         <ManageGroups

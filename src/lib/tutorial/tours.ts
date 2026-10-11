@@ -279,7 +279,7 @@ export const TOURS: Tour[] = [
       },
       {
         title: "Members",
-        body: "Approve join requests, promote officers, and organize people into groups.",
+        body: "Approve join requests, promote officers, add a co-sponsor teacher, and organize people into groups.",
         route: "/director/{clubId}/events",
         target: "nav-members",
       },

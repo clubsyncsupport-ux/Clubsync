@@ -192,16 +192,17 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
 
   if (!isAutoApproved && parentId) {
     if (approvalStatus === "PENDING_SPONSOR") {
-      const director = await db.clubMembership.findFirst({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" } });
-      if (director) {
-        await db.notification.create({
-          data: {
-            userId: director.userId,
+      // Every sponsor teacher of the club is asked, not just one.
+      const sponsors = await db.clubMembership.findMany({ where: { clubId, role: "DIRECTOR", status: "ACTIVE" }, select: { userId: true } });
+      if (sponsors.length > 0) {
+        await db.notification.createMany({
+          data: sponsors.map((s) => ({
+            userId: s.userId,
             type: "EVENT_PROPOSAL",
             title: "Event proposal needs your sign-off",
             body: `"${title}" needs your approval as Sponsor Teacher before it goes to the school administrator.`,
             linkUrl: `/director/${clubId}/events/${parentId}`,
-          },
+          })),
         });
       }
     } else {
