@@ -104,8 +104,8 @@ export default function PrivacyPage() {
             <h1>Privacy Policy &amp; Terms of Use</h1>
             <p className="legal-sub">How ClubSync collects, uses, and protects information for students, teachers, and school clubs — and the rules for using it.</p>
             <div className="legal-meta">
-              <span>Effective: August 26, 2026</span>
-              <span>Version 1.0</span>
+              <span>Effective: October 10, 2026</span>
+              <span>Version 1.1</span>
               <span>Applies to: clubsync.ca and all ClubSync services</span>
             </div>
           </header>
@@ -122,7 +122,7 @@ export default function PrivacyPage() {
               <a href="#p7">7. How it&rsquo;s protected</a>
               <a href="#p8">8. How long we keep it</a>
               <a href="#p9">9. Your rights</a>
-              <a href="#p10">10. Google Sign-In</a>
+              <a href="#p10">10. Google Sign-In &amp; Calendar</a>
               <a href="#p11">11. Children &amp; students</a>
               <a href="#p12">12. Built with AI assistance</a>
               <a href="#p13">13. Cookies</a>
@@ -175,6 +175,7 @@ export default function PrivacyPage() {
                       <tr><td>Club activity</td><td>Clubs you&rsquo;ve joined or created, your role in each (member, admin, or teacher/director), events you&rsquo;ve registered for or attended</td></tr>
                       <tr><td>Service hours</td><td>Hours logged through school events, plus any self-reported volunteer hours you submit, including your own description of the activity</td></tr>
                       <tr><td>Content you create</td><td>Club descriptions, announcements, and event details you post as a club director or officer</td></tr>
+                      <tr><td>Google Calendar access (optional)</td><td>Only if you choose to connect it: a permission token that lets ClubSync read your calendar. The events themselves are not saved — see <a href="#p10">Section 10</a></td></tr>
                       <tr><td>Club chat messages</td><td>Messages, attachments, and reactions you send in a club&rsquo;s chat channels — permanently logged, and never private from that club&rsquo;s Sponsor Teacher (see <a href="#p5">Section 5</a>)</td></tr>
                       <tr><td>Basic technical data</td><td>Standard web server logs (IP address, browser type, access times) kept briefly for security and troubleshooting, not used to track you individually</td></tr>
                     </tbody>
@@ -258,8 +259,17 @@ export default function PrivacyPage() {
               </section>
 
               <section className="legal-clause" id="p10">
-                <h3><span className="num">10</span>Signing in with Google</h3>
-                <p>If you choose &ldquo;Continue with Google&rdquo; instead of a password, Google shares your name, email address, and profile photo with ClubSync — nothing else. We never see or store your Google password. You can disconnect ClubSync from your Google account at any time from your Google Account settings, independently of ClubSync.</p>
+                <h3><span className="num">10</span>Signing in with Google and connecting Google Calendar</h3>
+                <p><strong>Signing in.</strong> If you choose &ldquo;Continue with Google&rdquo; instead of a password, Google shares your name, email address, and profile photo with ClubSync — nothing else. We never see or store your Google password. You can disconnect ClubSync from your Google account at any time from your Google Account settings, independently of ClubSync.</p>
+                <p><strong>Connecting Google Calendar (optional).</strong> ClubSync works fully without it. If you choose &ldquo;Connect Google Calendar&rdquo; in Settings, Google asks whether ClubSync may have read-only access to your calendar (the <code>calendar.readonly</code> permission). We use that access for one purpose: to show your own Google Calendar events alongside your club events on your ClubSync calendar, so you can see clashes in one place.</p>
+                <ul>
+                  <li><strong>What we read:</strong> the title and start time of events on your primary Google Calendar, for the dates you&rsquo;re looking at, each time you open a ClubSync calendar page.</li>
+                  <li><strong>What we store:</strong> the events themselves are not saved in ClubSync&rsquo;s database. We store only the permission token Google gives us (a long-lived one and a short-lived one) so we can keep reading your calendar until you disconnect. While a calendar page loads, events pass through ClubSync&rsquo;s web servers (see <a href="#p6">Section 6</a>) on their way to your screen.</li>
+                  <li><strong>Who can see it:</strong> only you. Your Google Calendar events are never shown to other students, club directors, teachers, or school administrators, and never shared with anyone else. We can&rsquo;t add, change, or delete anything in your Google Calendar — the access is read-only.</li>
+                  <li><strong>What we never do:</strong> sell it, use it for advertising, or use it to train any AI or machine-learning model. ClubSync staff don&rsquo;t read your calendar data.</li>
+                  <li><strong>Disconnecting:</strong> press &ldquo;Disconnect Google Calendar&rdquo; in Settings and ClubSync deletes its stored permission tokens right away. You can also remove ClubSync&rsquo;s access from your Google Account under Security &rarr; Third-party apps &amp; services. Deleting your ClubSync account removes the tokens too.</li>
+                </ul>
+                <p>ClubSync&rsquo;s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
               </section>
 
               <section className="legal-clause" id="p11">

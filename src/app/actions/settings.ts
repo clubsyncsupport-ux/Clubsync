@@ -54,7 +54,7 @@ export async function disconnectGoogleCalendarAction() {
   const user = await requireUser();
   await db.user.update({
     where: { id: user.id },
-    data: { googleCalendarRefreshToken: null, googleCalendarConnectedAt: null },
+    data: { googleCalendarRefreshToken: null, googleCalendarConnectedAt: null, googleCalendarAccessToken: null, googleCalendarAccessTokenExpiresAt: null },
   });
   revalidatePath("/settings");
   revalidatePath("/calendar");
@@ -158,6 +158,8 @@ export async function deleteMyAccountAction(_prev: SettingsState, formData: Form
             googleId: null,
             googleCalendarRefreshToken: null,
             googleCalendarConnectedAt: null,
+            googleCalendarAccessToken: null,
+            googleCalendarAccessTokenExpiresAt: null,
             avatarUrl: null,
             bio: null,
             grade: null,
