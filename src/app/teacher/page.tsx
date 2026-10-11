@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireTeacher } from "@/lib/teacher";
+import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { ColorDot } from "@/components/ui/badge";
@@ -12,12 +13,16 @@ import { parseCategories } from "@/lib/categories";
 export const metadata: Metadata = { title: "Teacher Dashboard" };
 
 export default async function TeacherDashboardPage() {
-  const user = await requireTeacher();
-  const memberships = await db.clubMembership.findMany({
-    where: { userId: user.id, role: "DIRECTOR", status: "ACTIVE" },
-    include: { club: true },
-    orderBy: { joinedAt: "asc" },
-  });
+  const authUser = await requireUser();
+  // Neither lookup needs the other's result, so they share one round trip.
+  const [user, memberships] = await Promise.all([
+    requireTeacher(),
+    db.clubMembership.findMany({
+      where: { userId: authUser.id, role: "DIRECTOR", status: "ACTIVE" },
+      include: { club: true },
+      orderBy: { joinedAt: "asc" },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 animate-fade-in">

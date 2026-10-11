@@ -3,6 +3,7 @@ import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { schoolGradeLevels } from "@/lib/grades";
 import { CreateEventForm, type EventPrefill } from "./create-event-form";
+import { getSavedRoles } from "@/lib/role-templates";
 import { BackButton } from "@/components/ui/back-button";
 
 export const metadata: Metadata = { title: "New Event" };
@@ -18,18 +19,19 @@ export default async function NewEventPage({
   const { club } = await getDirectorContext(clubId);
   const { copyFrom } = await searchParams;
 
-  const [members, sourceEvent, school, groups, contacts] = await Promise.all([
+  const [members, sourceEvent, school, groups, contacts, savedRoles] = await Promise.all([
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
-      include: { user: true },
+      select: { user: { select: { id: true, firstName: true, lastName: true } } },
       orderBy: { user: { firstName: "asc" } },
     }),
-    copyFrom ? db.event.findUnique({ where: { id: copyFrom } }) : null,
+    copyFrom ? db.event.findUnique({ where: { id: copyFrom }, include: { roles: { orderBy: { order: "asc" } } } }) : null,
     db.school.findUniqueOrThrow({ where: { id: club.schoolId } }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
     // Names only, deliberately — phone numbers are revealed on demand via
     // revealClubContactPhoneAction, never shipped into this page's props.
     db.clubContact.findMany({ where: { clubId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSavedRoles(clubId),
   ]);
   const gradeLevels = schoolGradeLevels(school);
 
@@ -52,6 +54,16 @@ export default async function NewEventPage({
           serviceTaskDescription: sourceEvent.serviceTaskDescription ?? "",
           attendanceEnabled: sourceEvent.attendanceEnabled,
           visibility: sourceEvent.visibility === "PRIVATE" ? "PRIVATE" : "PUBLIC",
+          // A copy keeps the roles too (headcount, grades and pay), so a second game
+          // or a repeat of last month's event doesn't start from an empty roster.
+          roles: sourceEvent.roles.map((r) => ({
+            name: r.name,
+            capacity: r.capacity,
+            allowedGrades: r.allowedGrades,
+            waitlistCapacity: r.waitlistCapacity,
+            payCents: r.payCents,
+            payNote: r.payNote,
+          })),
         }
       : undefined;
 
@@ -68,6 +80,7 @@ export default async function NewEventPage({
         groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
         gradeLevels={gradeLevels}
         contacts={contacts}
+        savedRoles={savedRoles}
         prefill={prefill}
       />
     </div>

@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { getDirectorContext } from "@/lib/director";
 import { saveUploadedFile } from "@/lib/storage";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 
 export type ActionState = { error: string | null; success?: boolean };
 
@@ -45,6 +47,7 @@ export async function deleteOwnClubAction(clubId: string, confirmName: string) {
 export async function approveMembershipAction(membershipId: string, clubId: string) {
   await getDirectorContext(clubId);
   await db.clubMembership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } });
+  after(() => ensureDefaultChannels(clubId));
   revalidatePath(`/director/${clubId}/members`);
 }
 
@@ -77,6 +80,7 @@ export async function addStudentToClubAction(clubId: string, userId: string) {
     update: { status: "ACTIVE" },
     create: { userId, clubId, role: "MEMBER", status: "ACTIVE" },
   });
+  after(() => ensureDefaultChannels(clubId));
   await db.notification.create({
     data: {
       userId,

@@ -5,6 +5,7 @@ import { getDirectorContext } from "@/lib/director";
 import { db } from "@/lib/db";
 import { schoolGradeLevels } from "@/lib/grades";
 import { EditEventForm } from "./edit-event-form";
+import { getSavedRoles } from "@/lib/role-templates";
 
 export const metadata: Metadata = { title: "Edit Event" };
 
@@ -22,15 +23,16 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
   });
   if (!event || event.clubId !== clubId) notFound();
 
-  const [members, school, groups, contacts] = await Promise.all([
+  const [members, school, groups, contacts, savedRoles] = await Promise.all([
     db.clubMembership.findMany({
       where: { clubId, status: "ACTIVE" },
-      include: { user: true },
+      select: { user: { select: { id: true, firstName: true, lastName: true } } },
       orderBy: { user: { firstName: "asc" } },
     }),
     db.school.findUniqueOrThrow({ where: { id: club.schoolId } }),
     db.memberGroup.findMany({ where: { clubId }, include: { members: true }, orderBy: { createdAt: "asc" } }),
     db.clubContact.findMany({ where: { clubId }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    getSavedRoles(clubId),
   ]);
   const gradeLevels = schoolGradeLevels(school);
   const registeredUserIds = event.registrations.map((r) => r.userId);
@@ -48,12 +50,15 @@ export default async function EditEventPage({ params }: { params: Promise<{ club
         groups={groups.map((g) => ({ id: g.id, name: g.name, color: g.color, memberIds: g.members.map((m) => m.userId) }))}
         gradeLevels={gradeLevels}
         contacts={contacts}
+        savedRoles={savedRoles}
         roles={event.roles.map((r) => ({
           id: r.id,
           name: r.name,
           capacity: r.capacity,
           allowedGrades: r.allowedGrades ? r.allowedGrades.split(",") : null,
           waitlistCapacity: r.waitlistCapacity,
+          payCents: r.payCents,
+          payNote: r.payNote,
           filledCount: event.registrations.filter((reg) => reg.roleId === r.id).length,
         }))}
         event={{

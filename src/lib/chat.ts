@@ -10,18 +10,31 @@ import { isSchoolAdminTier } from "@/lib/constants";
 // plain Members call chat actions too, not just Directors/Officers.
 export type ChatRole = "SPONSOR_TEACHER" | "SUPER_ADMIN" | "ADMIN" | "MEMBER" | "OVERSIGHT";
 
+// teacherMessagingOff / viewerIsStaff: whether this school has switched teacher
+// messaging off, and whether the person looking is a teacher account. The chat
+// screens use them to explain why a teacher can't reply; the actions enforce it.
 export type ChatContext =
   | { authorized: false }
-  | { authorized: true; clubId: string; schoolId: string; userId: string; chatRole: ChatRole; isOversight: boolean };
+  | {
+      authorized: true;
+      clubId: string;
+      schoolId: string;
+      userId: string;
+      chatRole: ChatRole;
+      isOversight: boolean;
+      teacherMessagingOff: boolean;
+      viewerIsStaff: boolean;
+    };
 
 export async function getChatContext(clubId: string): Promise<ChatContext> {
   const authUser = await requireUser();
   const [club, membership, me] = await Promise.all([
-    db.club.findUnique({ where: { id: clubId }, select: { schoolId: true } }),
+    db.club.findUnique({ where: { id: clubId }, select: { schoolId: true, school: { select: { teacherMessaging: true } } } }),
     db.clubMembership.findUnique({ where: { userId_clubId: { userId: authUser.id, clubId } } }),
     db.user.findUniqueOrThrow({ where: { id: authUser.id } }),
   ]);
   if (!club) return { authorized: false };
+  const policy = { teacherMessagingOff: !club.school.teacherMessaging, viewerIsStaff: me.accountKind === "STAFF" };
 
   // An actual club member's own role always takes precedence over oversight
   // status — oversight is for admins watching from OUTSIDE the club, not a
@@ -35,12 +48,12 @@ export async function getChatContext(clubId: string): Promise<ChatContext> {
           : membership.role === "OFFICER"
             ? "ADMIN"
             : "MEMBER";
-    return { authorized: true, clubId, schoolId: club.schoolId, userId: authUser.id, chatRole, isOversight: false };
+    return { authorized: true, clubId, schoolId: club.schoolId, userId: authUser.id, chatRole, isOversight: false, ...policy };
   }
 
   const isOversight = me.platformRole === "PLATFORM_ADMIN" || (isSchoolAdminTier(me.platformRole) && me.schoolAdminOfId === club.schoolId);
   if (isOversight) {
-    return { authorized: true, clubId, schoolId: club.schoolId, userId: authUser.id, chatRole: "OVERSIGHT", isOversight: true };
+    return { authorized: true, clubId, schoolId: club.schoolId, userId: authUser.id, chatRole: "OVERSIGHT", isOversight: true, ...policy };
   }
 
   return { authorized: false };
@@ -116,21 +129,30 @@ function hubChannelDisplayName(name: string | null, memberships: { userId: strin
 
 export type ChatHubChannel = {
   id: string;
+  name: string | null;
+  visibility: "OPEN" | "REQUEST" | "INVITE" | "DIRECT";
+  restrictedPosting: boolean;
+  memberships: { id: string; userId: string; status: "ACTIVE" | "PENDING"; canPost: boolean; user: { id: string; firstName: string; lastName: string; avatarUrl: string | null } }[];
   clubId: string;
   clubName: string;
   clubSlug: string;
   clubColor: string;
+  /** The viewer's own role inside this channel's club (it differs per club). */
+  chatRole: ChatRole;
   displayName: string;
   isDirect: boolean;
-  lastMessage: { body: string; createdAt: Date } | null;
+  lastMessage: { body: string; senderName: string; createdAt: string } | null;
 };
 
-// The "Chats" hub — every channel the student can see across every club
-// they're an active member of, one query instead of one per club, sorted by
-// most recent activity so the busiest conversations surface first. Only
-// ever called with the caller's own memberships (never OVERSIGHT — that's
-// for admins watching from outside a club they don't belong to, which has
-// no meaning for "my own chats").
+export function chatRoleForClubRole(role: string): ChatRole {
+  return role === "DIRECTOR" ? "SPONSOR_TEACHER" : role === "SUPER_ADMIN" ? "SUPER_ADMIN" : role === "OFFICER" ? "ADMIN" : "MEMBER";
+}
+
+// The Chats inbox — every channel the viewer can see across every club
+// they're an active member of, in one query instead of one per club, newest
+// activity first. Only ever called with the caller's own memberships (never
+// OVERSIGHT — that's for admins watching from outside a club they don't
+// belong to, which has no meaning for "my own chats").
 export async function getChatHubChannels(
   memberships: { clubId: string; role: string; club: { name: string; slug: string; color: string } }[],
   userId: string
@@ -150,27 +172,39 @@ export async function getChatHubChannels(
       ],
     },
     include: {
-      memberships: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } },
-      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, filteredBody: true, createdAt: true } },
+      memberships: { select: CHANNEL_MEMBER_SELECT },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { body: true, filteredBody: true, createdAt: true, sender: { select: { firstName: true } } },
+      },
     },
   });
 
   return channels
     .map((c): ChatHubChannel => {
       const role = roleByClub.get(c.clubId)!;
-      const showRealText = role === "DIRECTOR"; // the club's Sponsor Teacher always sees the real, unfiltered text
+      const chatRole = chatRoleForClubRole(role);
+      const showRealText = chatRole === "SPONSOR_TEACHER"; // the club's Sponsor Teacher always sees the real, unfiltered text
       const last = c.messages[0];
       const club = clubInfoById.get(c.clubId)!;
       return {
         id: c.id,
+        name: c.name,
+        visibility: c.visibility as ChatHubChannel["visibility"],
+        restrictedPosting: c.restrictedPosting,
+        memberships: c.memberships.map((m) => ({ id: m.id, userId: m.userId, status: m.status as "ACTIVE" | "PENDING", canPost: m.canPost, user: m.user })),
         clubId: c.clubId,
         clubName: club.name,
         clubSlug: club.slug,
         clubColor: club.color,
+        chatRole,
         displayName: hubChannelDisplayName(c.name, c.memberships, userId),
         isDirect: c.visibility === "DIRECT",
-        lastMessage: last ? { body: showRealText ? last.body : (last.filteredBody ?? last.body), createdAt: last.createdAt } : null,
+        lastMessage: last
+          ? { body: showRealText ? last.body : (last.filteredBody ?? last.body), senderName: last.sender.firstName, createdAt: last.createdAt.toISOString() }
+          : null,
       };
     })
-    .sort((a, b) => (b.lastMessage?.createdAt.getTime() ?? 0) - (a.lastMessage?.createdAt.getTime() ?? 0));
+    .sort((a, b) => (b.lastMessage ? Date.parse(b.lastMessage.createdAt) : 0) - (a.lastMessage ? Date.parse(a.lastMessage.createdAt) : 0));
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { ClassOverlapNotice } from "../class-overlap-notice";
 import { useState, useTransition } from "react";
 import { createEventAction } from "@/app/actions/director-events";
 import { revealClubContactPhoneAction } from "@/app/actions/club-contacts";
@@ -9,6 +10,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileUploadButton } from "@/components/ui/file-upload-button";
 import { EVENT_CATEGORIES, AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
 import { schoolDaysBetween } from "@/lib/school-days";
+import { dollarsFromCents, parsePayDollars } from "@/lib/role-pay";
+import type { SavedRole } from "@/app/actions/role-templates";
+import { RolePayFields, SavedRolesBar, useSavedRoles } from "../role-extras";
 
 export type EventPrefill = {
   title: string;
@@ -25,6 +29,7 @@ export type EventPrefill = {
   serviceTaskDescription: string;
   attendanceEnabled: boolean;
   visibility: "PUBLIC" | "PRIVATE";
+  roles?: { name: string; capacity: number; allowedGrades: string | null; waitlistCapacity: number | null; payCents: number | null; payNote: string | null }[];
 };
 
 export function CreateEventForm({
@@ -33,6 +38,7 @@ export function CreateEventForm({
   groups = [],
   gradeLevels,
   contacts = [],
+  savedRoles = [],
   prefill,
 }: {
   clubId: string;
@@ -46,6 +52,8 @@ export function CreateEventForm({
   /** Names only, deliberately — phone numbers are never fetched for this
    * page. See revealClubContactPhoneAction for the on-demand reveal. */
   contacts?: { id: string; name: string }[];
+  /** Roles this club saved from earlier events, ready to drop in. */
+  savedRoles?: SavedRole[];
   /** Pre-fills the form from an existing event (via "Copy Event"). Date/time,
    * recurrence, invite/assigned lists, and attachments are deliberately never
    * copied — those are per-instance, not part of the event "template". */
@@ -59,7 +67,21 @@ export function CreateEventForm({
   const [recurrence, setRecurrence] = useState<"NONE" | "DAILY" | "WEEKLY" | "MONTHLY">("NONE");
   const [endsNextDay, setEndsNextDay] = useState(false);
   const [allowedGrades, setAllowedGrades] = useState<string[]>(prefill?.allowedGrades ?? [...gradeLevels]);
-  const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[]; waitlistCapacity: string }[]>([]);
+  const [roles, setRoles] = useState<{ name: string; capacity: string; allowedGrades: string[]; waitlistCapacity: string; pay: string; payNote: string }[]>(
+    () =>
+      (prefill?.roles ?? []).map((r) => {
+        const grades = (r.allowedGrades?.split(",") ?? []).filter((g) => gradeLevels.includes(g));
+        return {
+          name: r.name,
+          capacity: String(r.capacity),
+          allowedGrades: grades.length > 0 ? grades : [...gradeLevels],
+          waitlistCapacity: r.waitlistCapacity ? String(r.waitlistCapacity) : "",
+          pay: dollarsFromCents(r.payCents),
+          payNote: r.payNote ?? "",
+        };
+      })
+  );
+  const savedRoleShelf = useSavedRoles(clubId, savedRoles);
   const [roleInput, setRoleInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -111,8 +133,43 @@ export function CreateEventForm({
       setRoleInput("");
       return;
     }
-    setRoles((prev) => [...prev, { name, capacity: "1", allowedGrades: [...gradeLevels], waitlistCapacity: "" }]);
+    setRoles((prev) => [...prev, { name, capacity: "1", allowedGrades: [...gradeLevels], waitlistCapacity: "", pay: "", payNote: "" }]);
     setRoleInput("");
+  }
+
+  function addSavedRole(t: SavedRole) {
+    if (roles.some((r) => r.name.toLowerCase() === t.name.toLowerCase())) return;
+    const grades = (t.allowedGrades?.split(",") ?? []).filter((g) => gradeLevels.includes(g));
+    setRoles((prev) => [
+      ...prev,
+      {
+        name: t.name,
+        capacity: String(t.capacity),
+        allowedGrades: grades.length > 0 ? grades : [...gradeLevels],
+        waitlistCapacity: t.waitlistCapacity ? String(t.waitlistCapacity) : "",
+        pay: dollarsFromCents(t.payCents),
+        payNote: t.payNote ?? "",
+      },
+    ]);
+  }
+
+  function setRolePay(name: string, pay: string) {
+    setRoles((prev) => prev.map((r) => (r.name === name ? { ...r, pay } : r)));
+  }
+
+  function setRolePayNote(name: string, payNote: string) {
+    setRoles((prev) => prev.map((r) => (r.name === name ? { ...r, payNote } : r)));
+  }
+
+  function saveRole(r: (typeof roles)[number]) {
+    return savedRoleShelf.save({
+      name: r.name,
+      capacity: Math.max(1, Number(r.capacity) || 1),
+      allowedGrades: r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : null,
+      waitlistCapacity: r.waitlistCapacity.trim() ? Number(r.waitlistCapacity) : null,
+      payCents: parsePayDollars(r.pay),
+      payNote: r.payNote.trim() || null,
+    });
   }
 
   function removeRole(name: string) {
@@ -162,6 +219,8 @@ export function CreateEventForm({
       // Empty string means "every grade" — same convention as the event-level restriction.
       formData.append("roleAllowedGrades", r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : "");
       formData.append("roleWaitlistCapacity", r.waitlistCapacity.trim());
+      formData.append("rolePay", r.pay.trim());
+      formData.append("rolePayNote", r.payNote.trim());
     });
     // Only send a restriction if it's not "every grade" — that's the same as no restriction.
     if (allowedGrades.length > 0 && allowedGrades.length < gradeLevels.length) {
@@ -246,6 +305,7 @@ export function CreateEventForm({
             />
             Ends the next day (overnight event)
           </label>
+          <ClassOverlapNotice clubId={clubId} />
           <div>
             <Label htmlFor="recurrence">Repeats</Label>
             <Select id="recurrence" name="recurrence" value={recurrence} onChange={(e) => setRecurrence(e.target.value as typeof recurrence)}>
@@ -400,6 +460,7 @@ export function CreateEventForm({
             Add roles like &ldquo;Setup Crew&rdquo; or &ldquo;Referee&rdquo; with how many people you need for each. If you add any
             roles, everyone who joins has to pick one — that way you can see exactly which roles still need people.
           </p>
+          <SavedRolesBar saved={savedRoleShelf.saved} usedNames={roles.map((r) => r.name)} onUse={addSavedRole} onDelete={savedRoleShelf.remove} />
           <div className="flex gap-2">
             <Input
               value={roleInput}
@@ -438,6 +499,14 @@ export function CreateEventForm({
                       Remove
                     </button>
                   </div>
+                  <RolePayFields
+                    idPrefix={`role-${r.name}`}
+                    pay={r.pay}
+                    payNote={r.payNote}
+                    onPayChange={(v) => setRolePay(r.name, v)}
+                    onPayNoteChange={(v) => setRolePayNote(r.name, v)}
+                    onSave={() => saveRole(r)}
+                  />
                   <div className="pl-0.5">
                     <p className="mb-1 text-xs text-text-muted">Grades allowed for this role — tap to toggle which ones can join it:</p>
                     <div className="flex flex-wrap items-center gap-1.5">

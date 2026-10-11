@@ -14,6 +14,7 @@ const TYPE_ICON: Record<string, string> = {
   ACHIEVEMENT: "🏅",
   PLATFORM: "🛠",
   CHAT_MESSAGE: "💬",
+  SCHOOL_ANNOUNCEMENT: "📣",
   EVENT_PROPOSAL: "📝",
   CLUB_REGISTRATION: "📋",
   CLUB_SUPERVISOR_REQUEST: "🧑‍🏫",

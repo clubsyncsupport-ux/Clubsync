@@ -97,6 +97,7 @@ function ProfileSwitcherMenu({
       <button
         ref={triggerRef}
         type="button"
+        data-tour="profile-menu"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Account menu — currently viewing as ${activeLabel}`}
@@ -141,7 +142,8 @@ function ProfileSwitcherMenu({
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-surface-2"
               >
                 <LayoutDashboard className="h-[18px] w-[18px]" strokeWidth={2} />
-                Teacher Dashboard
+                <span className="flex-1">Teacher Dashboard</span>
+                {active.kind === "student" && <span className="text-accent">✓</span>}
               </Link>
             )}
             {directorClubs.length > 0 && (

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { GRADES } from "@/lib/constants";
 import { schoolGradeLevels } from "@/lib/grades";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 
 async function resolveSchoolId(schoolName: string): Promise<string> {
   const name = schoolName.trim();
@@ -59,6 +60,7 @@ export async function completeStudentOnboardingAction(_prev: OnboardingState, fo
       })
     ),
   ]);
+  await Promise.all(clubIds.map((clubId) => ensureDefaultChannels(clubId)));
 
   redirect("/home");
 }

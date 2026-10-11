@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireTeacher } from "@/lib/teacher";
 import { db } from "@/lib/db";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 
 async function requirePendingRequest(clubId: string) {
   const teacher = await requireTeacher();
@@ -32,6 +33,10 @@ export async function approveSupervisorRequestAction(clubId: string) {
       },
     }),
   ]);
+
+  // The new Director joins the club's General/Announcements channels and may
+  // post announcements.
+  await ensureDefaultChannels(clubId);
 
   revalidatePath("/teacher");
   revalidatePath("/teacher/supervising-requests");

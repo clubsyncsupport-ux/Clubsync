@@ -10,6 +10,7 @@ import { EventCard } from "@/components/event-card";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { BellScheduleCard } from "@/components/bell-schedule-card";
+import { SchoolFeedHighlights } from "@/components/school-feed/school-feed-highlights";
 import { schoolNow, fromSchoolZone } from "@/lib/school-time";
 import { Compass, Calendar as CalendarIcon, Clock, Ticket, Users, MessageCircle, type LucideIcon } from "lucide-react";
 
@@ -70,6 +71,8 @@ export default async function HomePage() {
         </p>
       </div>
 
+      {viewer.schoolId && <SchoolFeedHighlights schoolId={viewer.schoolId} />}
+
       {viewer.schoolId && <BellScheduleCard schoolId={viewer.schoolId} />}
 
       <Card>
@@ -117,7 +120,7 @@ export default async function HomePage() {
         <StatTile label="Registered Events" value={registeredCount} />
       </div>
 
-      <div>
+      <div data-tour="home-events">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-text-primary">Upcoming Events</h2>
           <Link href="/calendar" className="text-sm font-medium text-accent">

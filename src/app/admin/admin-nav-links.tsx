@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { NAV_ICONS, type NavIconName } from "@/components/nav/nav-icons";
+import { navTourId } from "@/components/nav/nav-links";
 
 // The "active" item is whichever href matches most specifically — an exact
 // match always wins, otherwise the longest href that's a path-prefix of the
@@ -31,6 +32,7 @@ export function AdminNavLinks({ items }: { items: { href: string; label: string;
           <Link
             key={item.href}
             href={item.href}
+            data-tour={navTourId(item.label)}
             className={cn(
               "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
               active ? "bg-accent-soft text-accent-soft-text" : "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
@@ -63,6 +65,7 @@ export function AdminMobileNavLinks({ items }: { items: { href: string; label: s
           <Link
             key={item.href}
             href={item.href}
+            data-tour={navTourId(item.label)}
             className={cn(
               "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
               active ? "bg-accent-soft text-accent-soft-text" : "bg-surface-2 text-text-secondary"

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { toSchoolZone } from "@/lib/school-time";
 
 // Hugh Boyd's fixed bell-time templates (confirmed against the school's own
 // published Bell Schedule page, 2026-2027 year). Which template applies on a
@@ -124,16 +125,75 @@ export async function getSchedulesForRange(schoolId: string, start: Date, end: D
   return result;
 }
 
+// Slot times are stored as plain "H:MM" strings with no AM/PM. The school day
+// only runs 8:25-3:00, so any hour 1-7 is the afternoon ("1:39" = 1:39 PM).
+// Reading "1:39" as 1:39 AM is what made the afternoon blocks never highlight
+// as "current".
+export function slotMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return (h < 8 ? h + 12 : h) * 60 + m;
+}
+
+export function formatSlotTime(time: string): string {
+  const total = slotMinutes(time);
+  const h24 = Math.floor(total / 60);
+  const mm = String(total % 60).padStart(2, "0");
+  return `${h24 % 12 === 0 ? 12 : h24 % 12}:${mm} ${h24 < 12 ? "AM" : "PM"}`;
+}
+
 // Which of today's blocks is happening right now, if any — purely for
 // highlighting in the widget, not tied to any notification.
 export function currentSlotIndex(slots: BellSlot[], now: Date): number | null {
   const minutesNow = now.getHours() * 60 + now.getMinutes();
   for (let i = 0; i < slots.length; i++) {
-    const [sh, sm] = slots[i].start.split(":").map(Number);
-    const [eh, em] = slots[i].end.split(":").map(Number);
-    const start = sh * 60 + sm;
-    const end = eh * 60 + em;
-    if (minutesNow >= start && minutesNow < end) return i;
+    if (minutesNow >= slotMinutes(slots[i].start) && minutesNow < slotMinutes(slots[i].end)) return i;
   }
   return null;
+}
+
+export type OverlappedBlock = { label: string; start: string; end: string };
+export type ClassOverlap = { date: string; blocks: OverlappedBlock[] };
+
+// Which class blocks an event cuts into. Lunch, breaks and PLT aren't
+// "class", so they never count. `schedules` is keyed by the school's own
+// calendar date ("yyyy-MM-dd"); the event's times are read on the school's
+// clock, so this is correct no matter what timezone the server runs in.
+// Pure (no database), so a calendar page that already loaded a whole range of
+// schedules can call it once per event for free.
+export function classOverlapFromSchedules(schedules: Map<string, TodaysSchedule>, startAt: Date, endAt: Date): ClassOverlap[] {
+  const start = toSchoolZone(startAt);
+  const end = toSchoolZone(endAt);
+  const result: ClassOverlap[] = [];
+  const day = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  for (let i = 0; day <= lastDay && i < 7; i++, day.setDate(day.getDate() + 1)) {
+    const key = dateKey(day);
+    const schedule = schedules.get(key);
+    if (schedule?.status !== "SCHOOL_DAY") continue;
+    const dayStartMin = key === dateKey(start) ? start.getHours() * 60 + start.getMinutes() : 0;
+    const dayEndMin = key === dateKey(end) ? end.getHours() * 60 + end.getMinutes() : 24 * 60;
+    const blocks = schedule.slots
+      .filter((s) => s.isBlock && dayStartMin < slotMinutes(s.end) && dayEndMin > slotMinutes(s.start))
+      .map((s) => ({ label: `Block ${s.letter ?? ""}`.trim(), start: s.start, end: s.end }));
+    if (blocks.length > 0) result.push({ date: key, blocks });
+  }
+  return result;
+}
+
+// One-event version for pages that only show a single event.
+export async function getClassOverlap(schoolId: string, startAt: Date, endAt: Date): Promise<ClassOverlap[]> {
+  const schedules = await getSchedulesForRange(schoolId, toSchoolZone(startAt), toSchoolZone(endAt));
+  return classOverlapFromSchedules(schedules, startAt, endAt);
+}
+
+// "Block A, Block B · 8:30 AM – 11:21 AM" (or per-day for multi-day events).
+export function describeClassOverlap(overlap: ClassOverlap[]): string {
+  return overlap
+    .map((o, i) => {
+      const names = o.blocks.map((b) => b.label).join(", ");
+      const span = `${formatSlotTime(o.blocks[0].start)} – ${formatSlotTime(o.blocks[o.blocks.length - 1].end)}`;
+      const prefix = overlap.length > 1 ? `${o.date.slice(5)}: ` : "";
+      return `${i > 0 ? "; " : ""}${prefix}${names} · ${span}`;
+    })
+    .join("");
 }

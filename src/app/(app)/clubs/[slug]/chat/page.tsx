@@ -7,8 +7,9 @@ import { ChatView, type MemberOption, type ChatRole } from "@/components/chat/ch
 
 export const metadata: Metadata = { title: "Chat" };
 
-export default async function ClubChatPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ClubChatPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ channel?: string }> }) {
   const { slug } = await params;
+  const { channel: channelParam } = await searchParams;
   const club = await db.club.findUnique({ where: { slug }, select: { id: true, name: true } });
   if (!club) notFound();
 
@@ -45,6 +46,8 @@ export default async function ClubChatPage({ params }: { params: Promise<{ slug:
           memberships: c.memberships.map((m) => ({ id: m.id, userId: m.userId, status: m.status as "ACTIVE" | "PENDING", canPost: m.canPost, user: m.user })),
         }))}
         members={members}
+        initialChannelId={channelParam}
+        teacherMessaging={{ off: ctx.teacherMessagingOff, viewerIsStaff: ctx.viewerIsStaff }}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getChatContext, canCreateDirectChannel, canManageChannels, type ChatRole } from "@/lib/chat";
 import { saveUploadedFile } from "@/lib/storage";
@@ -124,6 +126,11 @@ export async function startDirectChannelAction(clubId: string, participantUserId
   const memberships = await db.clubMembership.findMany({ where: { clubId, userId: { in: allIds }, status: "ACTIVE" } });
   if (memberships.length !== allIds.length) return { error: "Everyone in this conversation needs to be an active club member." };
 
+  if (ctx.teacherMessagingOff) {
+    const teachers = await db.user.count({ where: { id: { in: allIds }, accountKind: "STAFF" } });
+    if (teachers > 0) return { error: "Teacher messaging is turned off at your school, so teachers can't be part of private conversations." };
+  }
+
   const roleByUserId = new Map(
     memberships.map((m) => [
       m.userId,
@@ -157,11 +164,26 @@ export async function startDirectChannelAction(clubId: string, participantUserId
 }
 
 export async function sendChatMessageAction(channelId: string, formData: FormData): Promise<{ error: string | null }> {
-  const channel = await db.channel.findUniqueOrThrow({ where: { id: channelId } });
-  const ctx = await getChatContext(channel.clubId);
-  if (!ctx.authorized || ctx.chatRole === "OVERSIGHT") return { error: "You can't post here." };
-
-  const membership = await db.channelMembership.findUnique({ where: { channelId_userId: { channelId, userId: ctx.userId } } });
+  const authUser = await requireUser();
+  // Posting needs an ACTIVE club membership and an ACTIVE channel membership
+  // (oversight admins can read but never post). The lookups are independent,
+  // so they share one round trip — every sequential database hop is felt as
+  // lag between pressing Send and seeing your message confirmed.
+  const [channel, membership, clubMembership, sender] = await Promise.all([
+    db.channel.findUnique({ where: { id: channelId }, include: { club: { select: { school: { select: { teacherMessaging: true } } } } } }),
+    db.channelMembership.findUnique({ where: { channelId_userId: { channelId, userId: authUser.id } } }),
+    db.clubMembership.findFirst({
+      where: { userId: authUser.id, status: "ACTIVE", club: { channels: { some: { id: channelId } } } },
+      select: { id: true },
+    }),
+    db.user.findUnique({ where: { id: authUser.id }, select: { accountKind: true } }),
+  ]);
+  if (!channel || !clubMembership) return { error: "You can't post here." };
+  // The school can switch teacher messaging off at any moment; this is the
+  // check that makes that real, whatever the page the teacher still has open.
+  if (!channel.club.school.teacherMessaging && sender?.accountKind === "STAFF") {
+    return { error: "Teacher messaging is turned off at your school. You can read this chat, but replies come from students." };
+  }
   if (!membership || membership.status !== "ACTIVE") return { error: "You need to join this channel first." };
   if (channel.restrictedPosting && !membership.canPost) return { error: "Only approved posters can send messages in this channel." };
 
@@ -183,71 +205,39 @@ export async function sendChatMessageAction(channelId: string, formData: FormDat
   // filter actually changed something, and is what everyone else is shown.
   const { filtered, wasFiltered } = filterProfanity(rawBody);
   await db.chatMessage.create({
-    data: { channelId, senderId: ctx.userId, body: rawBody, filteredBody: wasFiltered ? filtered : null, attachmentUrl },
+    data: { channelId, senderId: authUser.id, body: rawBody, filteredBody: wasFiltered ? filtered : null, attachmentUrl },
   });
 
-  // Notify other ACTIVE participants only — never the OVERSIGHT tier, whose
-  // access is a pull (they can go look), not a push (they don't get pinged
-  // for every message in every club's chat at their school). Recipients get
-  // the filtered preview text, same as they'd see in the channel itself.
-  const recipients = await db.channelMembership.findMany({
-    where: { channelId, status: "ACTIVE", userId: { not: ctx.userId } },
-    select: { userId: true },
-  });
-  if (recipients.length > 0) {
+  // Notifying everyone else in the channel happens after the sender already
+  // has their confirmation, so a busy channel never makes Send feel slow.
+  const senderId = authUser.id;
+  const channelName = channel.name;
+  const preview = (wasFiltered ? filtered : rawBody) || "Sent an attachment";
+  after(async () => {
+    // Other ACTIVE participants only — never the OVERSIGHT tier, whose
+    // access is a pull (they can go look), not a push (they don't get pinged
+    // for every message in every club's chat at their school). Recipients get
+    // the filtered preview text, same as they'd see in the channel itself.
+    const recipients = await db.channelMembership.findMany({
+      where: { channelId, status: "ACTIVE", userId: { not: senderId } },
+      select: { userId: true, user: { select: { accountKind: true } } },
+    });
+    if (recipients.length === 0) return;
+    // Teachers (STAFF accounts) read chat in their own Teacher area; everyone
+    // else uses the student Chats inbox. Either way the link opens the exact
+    // channel the message was sent in.
     await db.notification.createMany({
       data: recipients.map((r) => ({
         userId: r.userId,
         type: "CHAT_MESSAGE",
-        title: channel.name ? `New message in ${channel.name}` : "New message",
-        body: (wasFiltered ? filtered : rawBody) || "Sent an attachment",
-        linkUrl: `/director/${channel.clubId}/chat?channel=${channelId}`,
+        title: channelName ? `New message in ${channelName}` : "New message",
+        body: preview,
+        linkUrl: r.user.accountKind === "STAFF" ? `/teacher/chats?channel=${channelId}` : `/chats?channel=${channelId}`,
       })),
     });
-  }
-
-  revalidatePath(`/director/${channel.clubId}/chat`);
-  return { error: null };
-}
-
-export async function getChannelMessagesSinceAction(channelId: string, since: string) {
-  const channel = await db.channel.findUniqueOrThrow({ where: { id: channelId } });
-  const ctx = await getChatContext(channel.clubId);
-  if (!ctx.authorized) return [];
-  if (ctx.chatRole !== "OVERSIGHT") {
-    const membership = await db.channelMembership.findUnique({ where: { channelId_userId: { channelId, userId: ctx.userId } } });
-    if (!membership || membership.status !== "ACTIVE") return [];
-  }
-
-  const sinceDate = new Date(since);
-  if (isNaN(sinceDate.getTime())) return [];
-  const messages = await db.chatMessage.findMany({
-    where: { channelId, createdAt: { gt: sinceDate } },
-    select: {
-      id: true,
-      channelId: true,
-      body: true,
-      filteredBody: true,
-      attachmentUrl: true,
-      createdAt: true,
-      sender: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
-      reactions: { select: { userId: true, emoji: true } },
-    },
-    orderBy: { createdAt: "asc" },
-    take: 50,
   });
 
-  // The real, unfiltered text is resolved here, server-side, and only for
-  // the Sponsor Teacher / oversight tier — a filtered message shouldn't hide
-  // a real behavior problem from the one adult responsible for the club.
-  // Everyone else gets the cleaned-up version; `filteredBody` itself never
-  // crosses into the response for them, so there's nothing to reconstruct
-  // the original from client-side.
-  const showRealText = ctx.chatRole === "SPONSOR_TEACHER" || ctx.chatRole === "OVERSIGHT";
-  return messages.map(({ filteredBody, ...m }) => ({
-    ...m,
-    body: showRealText ? m.body : (filteredBody ?? m.body),
-  }));
+  return { error: null };
 }
 
 export async function addReactionAction(messageId: string, emoji: string) {

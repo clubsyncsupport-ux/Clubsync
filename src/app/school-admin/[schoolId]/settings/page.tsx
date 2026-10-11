@@ -3,6 +3,8 @@ import { getSchoolAdminContext } from "@/lib/school-admin";
 import { schoolGradeLevels } from "@/lib/grades";
 import { Card, CardContent } from "@/components/ui/card";
 import { GradeLevelsForm } from "./grade-levels-form";
+import { TutorialSettingsCard } from "@/components/tutorial/tutorial-settings-card";
+import { TeacherMessagingCard } from "@/components/teacher-messaging-card";
 
 export const metadata: Metadata = { title: "School Settings" };
 
@@ -20,6 +22,14 @@ export default async function SchoolAdminSettingsPage({ params }: { params: Prom
           <GradeLevelsForm schoolId={school.id} current={schoolGradeLevels(school)} />
         </CardContent>
       </Card>
+
+      <div className="mt-5">
+        <TeacherMessagingCard schoolId={school.id} enabled={school.teacherMessaging} />
+      </div>
+
+      <div className="mt-5">
+        <TutorialSettingsCard />
+      </div>
     </div>
   );
 }

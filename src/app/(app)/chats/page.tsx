@@ -1,58 +1,43 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { after } from "next/server";
 import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { getChatHubChannels } from "@/lib/chat";
-import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { BackButton } from "@/components/ui/back-button";
-import { ClubLogo } from "@/components/club-logo";
+import { healDefaultChannelsFor } from "@/lib/default-channels";
+import { getSchoolFeed } from "@/lib/school-feed";
 import { timeAgo } from "@/lib/format";
+import { ChatInbox, type InboxChannel } from "@/components/chat/chat-inbox";
 
 export const metadata: Metadata = { title: "Chats" };
 
-export default async function ChatsHubPage() {
+export default async function ChatsPage({ searchParams }: { searchParams: Promise<{ channel?: string }> }) {
+  const { channel } = await searchParams;
   const viewer = requireStudentViewer(await getViewer());
-  const channels = await getChatHubChannels(
-    viewer.memberships.map((m) => ({ clubId: m.clubId, role: m.role, club: { name: m.club.name, slug: m.club.slug, color: m.club.color } })),
-    viewer.id
-  );
+  after(() => healDefaultChannelsFor(viewer.id));
+  const [channels, [latest]] = await Promise.all([
+    getChatHubChannels(
+      viewer.memberships.map((m) => ({ clubId: m.clubId, role: m.role, club: { name: m.club.name, slug: m.club.slug, color: m.club.color } })),
+      viewer.id
+    ),
+    viewer.schoolId ? getSchoolFeed(viewer.schoolId, 1) : Promise.resolve([]),
+  ]);
+
+  const inbox: InboxChannel[] = channels.map((c) => ({
+    ...c,
+    lastMessage: c.lastMessage ? { body: c.lastMessage.body, senderName: c.lastMessage.senderName, ago: timeAgo(new Date(c.lastMessage.createdAt)) } : null,
+  }));
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 animate-fade-in">
-      <BackButton fallbackHref="/home" />
-      <h1 className="mt-3 text-2xl font-bold tracking-tight text-text-primary">Chats</h1>
+    <div className="mx-auto max-w-5xl px-4 py-6 animate-fade-in">
+      <h1 className="text-2xl font-bold tracking-tight text-text-primary">Chats</h1>
       <p className="mt-1 text-[15px] text-text-secondary">Every conversation across your clubs, in one place.</p>
-
-      <div className="mt-5">
-        {channels.length === 0 ? (
-          <Card>
-            <EmptyState icon="💬" title="No chats yet" description="Join a club and start a conversation to see it here." />
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {channels.map((c) => (
-              <Link key={c.id} href={`/clubs/${c.clubSlug}/chat`} className="block">
-                <Card className="transition-colors hover:border-border-strong">
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <ClubLogo name={c.clubName} color={c.clubColor} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-semibold text-text-primary">
-                          {c.isDirect ? "💬 " : "# "}
-                          {c.displayName}
-                        </p>
-                        {c.lastMessage && <span className="shrink-0 text-xs text-text-muted">{timeAgo(c.lastMessage.createdAt)}</span>}
-                      </div>
-                      <p className="truncate text-xs text-text-muted">{c.clubName}</p>
-                      <p className="mt-0.5 truncate text-sm text-text-secondary">{c.lastMessage ? c.lastMessage.body : "No messages yet"}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+      <ChatInbox
+        userId={viewer.id}
+        channels={inbox}
+        initialChannelId={channel}
+        announcement={{ href: "/school-feed", preview: latest ? latest.body : null, ago: latest ? timeAgo(latest.createdAt) : null }}
+        audience="student"
+        teacherMessaging={{ off: !viewer.school?.teacherMessaging, viewerIsStaff: false }}
+      />
     </div>
   );
 }

@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { addDays, addMonths, addWeeks } from "date-fns";
 import { db } from "@/lib/db";
 import { getDirectorContext } from "@/lib/director";
 import { saveUploadedFile } from "@/lib/storage";
+import { schoolWallClockToInstant, addToSchoolDate } from "@/lib/school-time";
+import { parsePayDollars } from "@/lib/role-pay";
+import { getClassOverlap, describeClassOverlap } from "@/lib/bell-schedule";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
 import { initialApprovalStatus, notifySchoolAdmins } from "@/lib/approvals";
 import { AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
@@ -14,9 +16,7 @@ import type { Event } from "@prisma/client";
 export type ActionState = { error: string | null };
 
 function combineDateTime(date: string, time: string, dayOffset = 0): Date {
-  const dt = new Date(`${date}T${time}`);
-  if (dayOffset) dt.setDate(dt.getDate() + dayOffset);
-  return dt;
+  return schoolWallClockToInstant(date, time, dayOffset);
 }
 
 export async function createEventAction(clubId: string, formData: FormData): Promise<ActionState> {
@@ -57,12 +57,16 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
   const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
   const roleAllowedGradesRaw = formData.getAll("roleAllowedGrades").map(String);
   const roleWaitlistCapacitiesRaw = formData.getAll("roleWaitlistCapacity").map(String);
+  const rolePayRaw = formData.getAll("rolePay").map(String);
+  const rolePayNoteRaw = formData.getAll("rolePayNote").map(String);
   const roles = roleNames
     .map((name, i) => ({
       name: name.trim(),
       capacity: roleCapacities[i],
       allowedGrades: roleAllowedGradesRaw[i]?.trim() || null,
       waitlistCapacity: roleWaitlistCapacitiesRaw[i]?.trim() ? Number(roleWaitlistCapacitiesRaw[i]) : null,
+      payCents: parsePayDollars(rolePayRaw[i] ?? ""),
+      payNote: rolePayNoteRaw[i]?.trim() || null,
     }))
     .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
   const internalNotes = String(formData.get("internalNotes") ?? "").trim() || null;
@@ -100,22 +104,23 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
     }
   }
 
-  const occurrences: Date[] = [startAt];
+  // Each repeat is computed from the school's calendar date + clock time (not
+  // by adding 24h*N to a timestamp), so a weekly 3:30 PM meeting stays at
+  // 3:30 PM after daylight-saving time ends in November.
+  const occurrences: { start: Date; end: Date }[] = [{ start: startAt, end: endAt }];
   if (recurrence !== "NONE" && recurrenceUntilRaw) {
-    const until = new Date(`${recurrenceUntilRaw}T23:59:59`);
-    let cursor = startAt;
-    const step = recurrence === "DAILY" ? (d: Date) => addDays(d, 1) : recurrence === "WEEKLY" ? (d: Date) => addWeeks(d, 1) : (d: Date) => addMonths(d, 1);
-    while (occurrences.length < 52) {
-      cursor = step(cursor);
-      if (cursor > until) break;
-      occurrences.push(cursor);
+    const until = schoolWallClockToInstant(recurrenceUntilRaw, "23:59:59");
+    const unit = recurrence === "DAILY" ? "day" : recurrence === "WEEKLY" ? "week" : "month";
+    for (let i = 1; occurrences.length < 52; i++) {
+      const ymd = addToSchoolDate(date, unit, i);
+      const start = schoolWallClockToInstant(ymd, startTime);
+      if (start > until) break;
+      occurrences.push({ start, end: schoolWallClockToInstant(ymd, endTime, endsNextDay ? 1 : 0) });
     }
   }
-  const duration = endAt.getTime() - startAt.getTime();
 
   let parentId: string | null = null;
-  for (const occStart of occurrences) {
-    const occEnd = new Date(occStart.getTime() + duration);
+  for (const { start: occStart, end: occEnd } of occurrences) {
     const created: Event = await db.event.create({
       data: {
         clubId,
@@ -140,7 +145,7 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
         attendanceEnabled,
         recurrence,
         recurrenceParentId: parentId,
-        recurrenceUntil: recurrenceUntilRaw ? new Date(recurrenceUntilRaw) : null,
+        recurrenceUntil: recurrenceUntilRaw ? schoolWallClockToInstant(recurrenceUntilRaw, "12:00") : null,
         createdById: club.createdById,
         internalNotes,
         purpose,
@@ -162,6 +167,8 @@ export async function createEventAction(clubId: string, formData: FormData): Pro
                 capacity: r.capacity,
                 allowedGrades: r.allowedGrades,
                 waitlistCapacity: r.waitlistCapacity,
+                payCents: r.payCents,
+                payNote: r.payNote,
                 order: i,
               })),
             }
@@ -278,6 +285,8 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
   const roleCapacities = formData.getAll("roleCapacity").map((v) => Number(v));
   const roleAllowedGradesRaw = formData.getAll("roleAllowedGrades").map(String);
   const roleWaitlistCapacitiesRaw = formData.getAll("roleWaitlistCapacity").map(String);
+  const rolePayRaw = formData.getAll("rolePay").map(String);
+  const rolePayNoteRaw = formData.getAll("rolePayNote").map(String);
   const roleDrafts = roleNames
     .map((name, i) => ({
       id: roleIds[i] || null,
@@ -285,6 +294,8 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
       capacity: roleCapacities[i],
       allowedGrades: roleAllowedGradesRaw[i]?.trim() || null,
       waitlistCapacity: roleWaitlistCapacitiesRaw[i]?.trim() ? Number(roleWaitlistCapacitiesRaw[i]) : null,
+      payCents: parsePayDollars(rolePayRaw[i] ?? ""),
+      payNote: rolePayNoteRaw[i]?.trim() || null,
     }))
     .filter((r) => r.name && Number.isFinite(r.capacity) && r.capacity > 0);
 
@@ -293,11 +304,11 @@ export async function updateEventAction(eventId: string, formData: FormData): Pr
     if (r.id) {
       await db.eventRole.updateMany({
         where: { id: r.id, eventId },
-        data: { name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity },
+        data: { name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity, payCents: r.payCents, payNote: r.payNote },
       });
     } else {
       await db.eventRole.create({
-        data: { eventId, name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity, order: newRoleOrder++ },
+        data: { eventId, name: r.name, capacity: r.capacity, allowedGrades: r.allowedGrades, waitlistCapacity: r.waitlistCapacity, payCents: r.payCents, payNote: r.payNote, order: newRoleOrder++ },
       });
     }
   }
@@ -720,4 +731,15 @@ export async function updateAttendanceNoteAction(eventId: string, userId: string
   await getDirectorContext(event.clubId);
   await db.eventRegistration.updateMany({ where: { eventId, userId }, data: { attendanceNote: note.trim() || null } });
   revalidatePath(`/director/${event.clubId}/events/${eventId}/attendance`);
+}
+
+// Live heads-up for the event forms: which class blocks the typed date/time
+// would cut into (null when none, or when the input isn't complete yet).
+export async function getClassOverlapPreviewAction(clubId: string, date: string, startTime: string, endTime: string, endsNextDay: boolean): Promise<string | null> {
+  const { club } = await getDirectorContext(clubId);
+  const start = schoolWallClockToInstant(date, startTime);
+  const end = schoolWallClockToInstant(date, endTime, endsNextDay ? 1 : 0);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return null;
+  const overlap = await getClassOverlap(club.schoolId, start, end);
+  return overlap.length > 0 ? describeClassOverlap(overlap) : null;
 }

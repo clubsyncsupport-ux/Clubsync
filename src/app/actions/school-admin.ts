@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/admin";
 import { slugify } from "@/lib/slugify";
 import { CLUB_COLOR_PALETTE, GRADES } from "@/lib/constants";
 import { schoolGradeLevels } from "@/lib/grades";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 
 export type SchoolAdminFormState = { error: string | null };
 
@@ -52,6 +53,7 @@ export async function createClubAsSchoolAdminAction(
     },
   });
 
+  await ensureDefaultChannels(club.id);
   await logAudit(user.id, "CREATE_CLUB", "Club", club.id, undefined, { schoolId: school.id, name });
   revalidatePath(`/school-admin/${school.id}/clubs`);
   redirect(`/school-admin/${school.id}/clubs/${club.id}`);
@@ -106,4 +108,21 @@ export async function updateStudentGradeAction(
   revalidatePath(`/admin/users/${userId}`);
   revalidatePath(`/school-admin/${targetUser.schoolId}/students/${userId}`);
   return { error: null, success: true };
+}
+
+// The per-school switch for teacher↔student messaging. On by default; turning
+// it off makes teachers read-only observers in student chats and keeps them
+// out of private conversations. It takes effect on the very next message or
+// page load — there's nothing to deploy. Only that school's own admin (or a
+// Platform Admin) can flip it, because getSchoolAdminContext derives the
+// school from the caller rather than trusting the form.
+export async function setTeacherMessagingAction(schoolId: string, enabled: boolean): Promise<{ error: string | null }> {
+  const { school, user } = await getSchoolAdminContext(schoolId);
+  if (school.teacherMessaging === enabled) return { error: null };
+
+  await db.school.update({ where: { id: school.id }, data: { teacherMessaging: enabled } });
+  await logAudit(user.id, "SET_TEACHER_MESSAGING", "School", school.id, { teacherMessaging: school.teacherMessaging }, { teacherMessaging: enabled });
+  revalidatePath(`/school-admin/${school.id}/settings`);
+  revalidatePath(`/admin/schools/${school.id}`);
+  return { error: null };
 }

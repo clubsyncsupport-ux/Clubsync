@@ -97,6 +97,11 @@ model User {
   // club otherwise requires and create a club with no oversight at all.
   staffApprovalStatus String?
 
+  // How far through the in-app tutorial this person is (JSON text: which tours
+  // they finished or skipped). Null means they've never seen it, so the short
+  // tour starts the first time they open the app. See src/lib/tutorial/state.ts.
+  tutorialState String?
+
   grade             String?
   schoolId          String?
   school            School?  @relation(fields: [schoolId], references: [id])
@@ -149,6 +154,7 @@ model User {
 
   createdChannels     Channel[]            @relation("ChannelCreatedBy")
   channelMemberships  ChannelMembership[]
+  schoolAnnouncements SchoolAnnouncement[] @relation("SchoolAnnouncementAuthor")
   sentChatMessages    ChatMessage[]        @relation("ChatMessageSender")
   chatMessageReactions ChatMessageReaction[]
 
@@ -187,10 +193,17 @@ model School {
   // reorder of the standard GRADES constant — see src/lib/grades.ts.
   gradeLevels String @default("Grade 8,Grade 9,Grade 10,Grade 11,Grade 12")
 
+  // Whether teacher accounts can send messages in student club chats and
+  // private conversations. On by default (it mirrors what teachers already do
+  // in Teams); a Platform Admin or the school's own admin can switch it off at
+  // any time, and teachers then become read-only observers.
+  teacherMessaging Boolean @default(true)
+
   users        User[]
   clubs        Club[]
   schoolAdmins User[] @relation("SchoolAdminOf")
   calendarEvents SchoolCalendarEvent[]
+  announcements  SchoolAnnouncement[]
 }
 
 // School-published events (Pro-D days, Collaboration Days, parent-teacher
@@ -272,6 +285,7 @@ model Club {
   contacts      ClubContact[]
   registrations ClubRegistration[]
   channels      Channel[]
+  roleTemplates ClubRoleTemplate[]
   positions     ClubPosition[]
 }
 
@@ -624,6 +638,7 @@ model Event {
   checklistItems  EventChecklistItem[]
   serviceHours    ServiceHourRecord[]
   roles           EventRole[]
+  schoolAnnouncements SchoolAnnouncement[]
 }
 
 // Optional signup roles for an event (e.g. "Setup Crew", "Referee") — when an
@@ -646,8 +661,30 @@ model EventRole {
   // independent of the role's own capacity (REGISTERED) or the event's
   // overall waitlistCapacity. Null means unlimited.
   waitlistCapacity Int?
+  // Optional pay for this role (athletics officials, scorekeepers, ...). Null
+  // means unpaid/volunteer. Stored in cents; payNote is short free text shown
+  // beside it, e.g. "per game".
+  payCents Int?
+  payNote  String?
 
   registrations EventRegistration[]
+}
+
+// A role a club has saved to reuse on future events ("Referee", 2 needed,
+// Grade 10+, $40 per game) so it doesn't have to be re-typed every time.
+model ClubRoleTemplate {
+  id               String   @id @default(cuid())
+  clubId           String
+  club             Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name             String
+  capacity         Int      @default(1)
+  allowedGrades    String?
+  waitlistCapacity Int?
+  payCents         Int?
+  payNote          String?
+  createdAt        DateTime @default(now())
+
+  @@unique([clubId, name])
 }
 
 model EventInvite {
@@ -717,6 +754,29 @@ model Announcement {
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
+}
+
+// ---------- School-wide announcements ----------
+
+// One school-wide feed that everyone at the school can read and only staff
+// (teachers, sponsor teachers, principals/admins, platform admin) can post to.
+// Deliberately a separate table rather than a chat Channel: there is no
+// per-student membership to maintain (everyone at the school sees it), no
+// posting permissions to model, and an event can be attached so the post is a
+// real "come to this" promotion instead of just text.
+model SchoolAnnouncement {
+  id        String   @id @default(cuid())
+  schoolId  String
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("SchoolAnnouncementAuthor", fields: [authorId], references: [id])
+  body      String
+  imageUrl  String?
+  eventId   String?
+  event     Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, createdAt])
 }
 
 // ---------- Service Hours & Achievements ----------
@@ -826,7 +886,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // "EVENT_REMINDER" | "ANNOUNCEMENT" | "REGISTRATION" | "SERVICE_HOURS" | "ACHIEVEMENT" | "PLATFORM" | "CHAT_MESSAGE" | "CLUB_SUPERVISOR_REQUEST" | "EVENT_PROPOSAL" | "CLUB_REGISTRATION"
+  type      String   // "EVENT_REMINDER" | "ANNOUNCEMENT" | "REGISTRATION" | "SERVICE_HOURS" | "ACHIEVEMENT" | "PLATFORM" | "CHAT_MESSAGE" | "CLUB_SUPERVISOR_REQUEST" | "EVENT_PROPOSAL" | "CLUB_REGISTRATION" | "SCHOOL_ANNOUNCEMENT"
   title     String
   body      String
   linkUrl   String?

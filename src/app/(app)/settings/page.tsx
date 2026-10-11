@@ -9,6 +9,7 @@ import { ServiceHourGoalForm } from "./service-hour-goal-form";
 import { ChangePasswordForm } from "./change-password-form";
 import { DeleteAccountForm } from "./delete-account-form";
 import { InstallAppCard } from "./install-app-card";
+import { TutorialSettingsCard } from "@/components/tutorial/tutorial-settings-card";
 import { BackButton } from "@/components/ui/back-button";
 import type { ThemePref } from "@/lib/constants";
 
@@ -40,6 +41,7 @@ export default async function SettingsPage() {
       />
       <GoogleCalendarCard connected={!!viewer.googleCalendarConnectedAt} />
       <ServiceHourGoalForm current={viewer.serviceHourGoal} />
+      <TutorialSettingsCard />
       <ChangePasswordForm />
       <InstallAppCard />
       <DeleteAccountForm />

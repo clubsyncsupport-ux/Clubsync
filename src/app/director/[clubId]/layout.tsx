@@ -1,9 +1,11 @@
 import { getDirectorContext } from "@/lib/director";
 import { getViewer, directorClubs } from "@/lib/viewer";
-import { getActiveProfile } from "@/lib/auth/session";
+import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { AppShell } from "@/components/nav/app-shell";
 import type { NavItem } from "@/components/nav/nav-links";
+import { TutorialRoot } from "@/components/tutorial/tutorial-root";
+import { tutorialPropsFor } from "@/lib/tutorial/server";
 
 export default async function DirectorLayout({
   children,
@@ -13,11 +15,13 @@ export default async function DirectorLayout({
   params: Promise<{ clubId: string }>;
 }) {
   const { clubId } = await params;
-  const { club } = await getDirectorContext(clubId);
-  const viewer = await getViewer();
-  const active = await getActiveProfile();
-  const [unreadCount, pendingRequestCount] = await Promise.all([
-    db.notification.count({ where: { userId: viewer.id, read: false } }),
+  const authUser = await requireUser();
+  // Everything the shell needs only depends on who's signed in and which club
+  // this is, so it all runs in one round trip instead of one after another.
+  const [{ club }, viewer, unreadCount, pendingRequestCount] = await Promise.all([
+    getDirectorContext(clubId),
+    getViewer(),
+    db.notification.count({ where: { userId: authUser.id, read: false } }),
     db.clubMembership.count({ where: { clubId, status: "PENDING" } }),
   ]);
 
@@ -34,19 +38,30 @@ export default async function DirectorLayout({
     { href: `/director/${clubId}/registration`, label: "Registration", icon: "ClipboardCheck" },
     { href: `/director/${clubId}/settings`, label: "Settings", icon: "Settings" },
   ];
+  const isStaff = viewer.accountKind === "STAFF";
 
   return (
-    <AppShell
-      navItems={navItems}
-      eyebrow={`Managing · ${club.name}`}
-      user={{ firstName: viewer.firstName, lastName: viewer.lastName, avatarUrl: viewer.avatarUrl }}
-      directorClubs={directorClubs(viewer).map((c) => ({ id: c.id, name: c.name, color: c.color }))}
-      isAdmin={viewer.platformRole === "PLATFORM_ADMIN"}
-      isStaff={viewer.accountKind === "STAFF"}
-      active={active}
-      unreadCount={unreadCount}
+    <TutorialRoot
+      {...tutorialPropsFor(viewer, {
+        role: isStaff ? "teacher" : "student",
+        isClubLeader: true,
+        // The quick tour belongs to the home pages, not a club's screens.
+        autoStartPath: null,
+        ids: { clubId, schoolId: viewer.schoolAdminOfId ?? undefined },
+      })}
     >
-      {children}
-    </AppShell>
+      <AppShell
+        navItems={navItems}
+        eyebrow={`Managing · ${club.name}`}
+        user={{ firstName: viewer.firstName, lastName: viewer.lastName, avatarUrl: viewer.avatarUrl }}
+        directorClubs={directorClubs(viewer).map((c) => ({ id: c.id, name: c.name, color: c.color }))}
+        isAdmin={viewer.platformRole === "PLATFORM_ADMIN"}
+        isStaff={isStaff}
+        active={{ kind: "director", clubId }}
+        unreadCount={unreadCount}
+      >
+        {children}
+      </AppShell>
+    </TutorialRoot>
   );
 }

@@ -19,7 +19,7 @@ import {
 } from "date-fns";
 import { getViewer, requireStudentViewer } from "@/lib/viewer";
 import { getVisibleEvents } from "@/lib/data/calendar";
-import { getSchedulesForRange, currentSlotIndex, type TodaysSchedule } from "@/lib/bell-schedule";
+import { getSchedulesForRange, currentSlotIndex, classOverlapFromSchedules, describeClassOverlap, formatSlotTime, type TodaysSchedule, type ClassOverlap } from "@/lib/bell-schedule";
 import { schoolNow, toSchoolZone } from "@/lib/school-time";
 import { getGoogleCalendarEvents } from "@/lib/google-calendar";
 import { db } from "@/lib/db";
@@ -107,7 +107,16 @@ export default async function CalendarPage({
       const isFull = e.maxParticipants != null && e._count.registrations >= e.maxParticipants;
       // Red is reserved to mean "full" — never a pickable club color — so a
       // full event's pill/dot always shows red regardless of its club's color.
-      return { id: e.id, kind: "club" as const, title: e.title, startAt: e.startAt, color: isFull ? "var(--danger)" : e.club.color, isFull, event: e };
+      return {
+        id: e.id,
+        kind: "club" as const,
+        title: e.title,
+        startAt: e.startAt,
+        color: isFull ? "var(--danger)" : e.club.color,
+        isFull,
+        event: e,
+        overlap: classOverlapFromSchedules(schedules, e.startAt, e.endAt),
+      };
     }),
     ...personalEvents.map((e) => ({
       id: e.id,
@@ -132,7 +141,9 @@ export default async function CalendarPage({
     <div className="mx-auto max-w-4xl px-4 py-6 animate-fade-in">
       <h1 className="text-2xl font-bold tracking-tight text-text-primary">Calendar</h1>
       <div className="mt-3 flex flex-wrap gap-2">
-        <AddPersonalEvent categories={categories} />
+        <div data-tour="calendar-add">
+          <AddPersonalEvent categories={categories} />
+        </div>
         <ColorIndex categories={categories} />
       </div>
 
@@ -149,7 +160,7 @@ export default async function CalendarPage({
             Today
           </Link>
         </div>
-        <div className="flex rounded-xl border border-border p-1">
+        <div data-tour="calendar-views" className="flex rounded-xl border border-border p-1">
           {(["month", "week", "day", "agenda"] as const).map((v) => (
             <Link
               key={v}
@@ -166,7 +177,7 @@ export default async function CalendarPage({
       </div>
 
       {(clubs.length > 0 || categories.length > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <div data-tour="calendar-legend" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <ClubFilterLegend clubs={clubs} storageKey="clubsync_hidden_clubs_student_calendar" />
           {categories.map((c) => (
             <div key={c.id} className="flex items-center gap-1.5 text-xs text-text-secondary">
@@ -234,13 +245,24 @@ type PersonalEventData = {
 };
 
 type CalendarItem =
-  | { id: string; kind: "club"; title: string; startAt: Date; color: string; isFull: boolean; event: ClubEventWithClub }
+  | { id: string; kind: "club"; title: string; startAt: Date; color: string; isFull: boolean; event: ClubEventWithClub; overlap: ClassOverlap[] }
   | { id: string; kind: "personal"; title: string; startAt: Date; color: string; personal: PersonalEventData }
   | { id: string; kind: "google"; title: string; startAt: Date; color: string }
   | { id: string; kind: "school"; title: string; startAt: Date; color: string };
 
 function CalendarItemRow({ item }: { item: CalendarItem }) {
-  if (item.kind === "club") return <EventCard event={item.event} full={item.isFull} />;
+  if (item.kind === "club") {
+    return (
+      <div>
+        <EventCard event={item.event} full={item.isFull} />
+        {item.overlap.length > 0 && (
+          <p className="mt-1 px-1 text-xs font-medium text-warning" data-club-id={item.event.club.id}>
+            🏫 During class: {describeClassOverlap(item.overlap)}
+          </p>
+        )}
+      </div>
+    );
+  }
   if (item.kind === "personal") return <PersonalEventRow event={item.personal} />;
   const label = item.kind === "google" ? "Google Calendar" : "School";
   const dataAttr = item.kind === "google" ? GOOGLE_CALENDAR_LEGEND_ID : SCHOOL_EVENTS_LEGEND_ID;
@@ -360,12 +382,30 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
                 </p>
                 {schedule.slots
                   .filter((s) => s.isBlock)
-                  .map((slot, i) => (
-                    <div key={i} className="flex items-center justify-between text-[10px] text-text-secondary">
-                      <span>Block {slot.letter}</span>
-                      <span className="tabular-nums">{slot.start}</span>
-                    </div>
-                  ))}
+                  .map((slot, i) => {
+                    const dayKey = format(day, "yyyy-MM-dd");
+                    const conflicts = dayItems.filter(
+                      (it): it is ClubCalendarItem =>
+                        it.kind === "club" && it.overlap.some((o) => o.date === dayKey && o.blocks.some((b) => b.start === slot.start && b.end === slot.end))
+                    );
+                    return (
+                      <div key={i} className="flex items-center justify-between text-[10px] text-text-secondary">
+                        <span className="flex items-center gap-1">
+                          Block {slot.letter}
+                          {conflicts.map((e) => (
+                            <span
+                              key={e.id}
+                              data-club-id={e.event.club.id}
+                              title={`${e.title} runs during this block`}
+                              className="inline-block h-1.5 w-1.5 rounded-full ring-1 ring-warning"
+                              style={{ backgroundColor: e.event.club.color }}
+                            />
+                          ))}
+                        </span>
+                        <span className="tabular-nums">{slot.start}</span>
+                      </div>
+                    );
+                  })}
               </div>
             )}
             <div className="space-y-1.5">
@@ -421,10 +461,26 @@ function WeekColumns({ refDate, items, schedules }: { refDate: Date; items: Cale
   );
 }
 
-function DayBellSchedule({ refDate, schedule }: { refDate: Date; schedule: TodaysSchedule | undefined }) {
+type ClubCalendarItem = Extract<CalendarItem, { kind: "club" }>;
+
+// The day's bell schedule with the day's events slotted into it: a block an
+// event cuts into is highlighted and lists the event, so a student can see at a
+// glance which classes they'd miss instead of just a list of times.
+function DayBellSchedule({
+  refDate,
+  schedule,
+  events,
+}: {
+  refDate: Date;
+  schedule: TodaysSchedule | undefined;
+  events: ClubCalendarItem[];
+}) {
   if (schedule?.status !== "SCHOOL_DAY") return null;
   const now = schoolNow();
   const current = isSameDay(refDate, now) ? currentSlotIndex(schedule.slots, now) : null;
+  const dayKey = format(refDate, "yyyy-MM-dd");
+  const eventsInSlot = (slot: { start: string; end: string }) =>
+    events.filter((e) => e.overlap.some((o) => o.date === dayKey && o.blocks.some((b) => b.start === slot.start && b.end === slot.end)));
   return (
     <div data-club-id={BELL_SCHEDULE_LEGEND_ID}>
       <Card>
@@ -432,12 +488,35 @@ function DayBellSchedule({ refDate, schedule }: { refDate: Date; schedule: Today
           <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Bell Schedule</p>
           <p className="mt-0.5 text-sm font-medium text-text-primary">{schedule.dayLabel}</p>
           <div className="mt-3 divide-y divide-border">
-            {schedule.slots.map((slot, i) => (
-              <div key={i} className={cn("flex items-center justify-between py-1.5", i === current ? "text-accent" : "text-text-secondary")}>
-                <span className="text-sm font-medium">{slot.isBlock ? `Block ${slot.letter ?? ""}`.trim() : slot.name}</span>
-                <span className="text-xs tabular-nums">{slot.start === slot.end ? slot.start : `${slot.start} – ${slot.end}`}</span>
-              </div>
-            ))}
+            {schedule.slots.map((slot, i) => {
+              const conflicts = slot.isBlock ? eventsInSlot(slot) : [];
+              return (
+                <div
+                  key={i}
+                  className={cn("py-1.5", conflicts.length > 0 && "-mx-2 rounded-lg border-l-2 border-warning bg-warning/10 px-2")}
+                >
+                  <div className={cn("flex items-center justify-between", i === current ? "text-accent" : "text-text-secondary")}>
+                    <span className="text-sm font-medium">{slot.isBlock ? `Block ${slot.letter ?? ""}`.trim() : slot.name}</span>
+                    <span className="text-xs tabular-nums">
+                      {slot.start === slot.end ? formatSlotTime(slot.start) : `${formatSlotTime(slot.start)} – ${formatSlotTime(slot.end)}`}
+                    </span>
+                  </div>
+                  {conflicts.map((e) => (
+                    <Link
+                      key={e.id}
+                      href={`/events/${e.id}`}
+                      data-club-id={e.event.club.id}
+                      className="mt-1 flex items-center gap-1.5 text-xs font-medium text-text-primary hover:underline"
+                    >
+                      <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: e.event.club.color }} />
+                      <span className="truncate">
+                        {e.title} · {format(toSchoolZone(e.startAt), "h:mm a")}–{format(toSchoolZone(e.event.endAt), "h:mm a")}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -450,7 +529,7 @@ function DayList({ refDate, items, schedules }: { refDate: Date; items: Calendar
   const schedule = schedules.get(format(refDate, "yyyy-MM-dd"));
   return (
     <div className="space-y-2">
-      <DayBellSchedule refDate={refDate} schedule={schedule} />
+      <DayBellSchedule refDate={refDate} schedule={schedule} events={dayItems.filter((it): it is ClubCalendarItem => it.kind === "club")} />
       {dayItems.length === 0 ? (
         <Card>
           <EmptyState icon="📅" title="Nothing scheduled" description="No events on this day." />

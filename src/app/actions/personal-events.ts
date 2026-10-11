@@ -1,15 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { addDays, addWeeks, addMonths } from "date-fns";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { schoolWallClockToInstant, addToSchoolDate } from "@/lib/school-time";
 import type { PersonalEvent } from "@prisma/client";
 
 export type ActionState = { error: string | null; success?: boolean };
 
 function combineDateTime(date: string, time: string): Date {
-  return new Date(`${date}T${time}`);
+  return schoolWallClockToInstant(date, time);
 }
 
 export async function createPersonalEventAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -32,31 +32,33 @@ export async function createPersonalEventAction(_prev: ActionState, formData: Fo
   if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) return { error: "Invalid date or time." };
   if (recurrence !== "NONE" && !recurrenceUntilRaw) return { error: "Pick an end date for the repeat." };
 
-  const occurrences: Date[] = [startAt];
+  // Repeats are computed from the school's calendar date + clock time, not by
+  // adding 24h*N, so a weekly 9:00 AM event stays 9:00 AM after the November
+  // clock change.
+  const occurrences: { start: Date; end: Date }[] = [{ start: startAt, end: endAt }];
   if (recurrence !== "NONE" && recurrenceUntilRaw) {
-    const until = new Date(`${recurrenceUntilRaw}T23:59:59`);
-    const step = recurrence === "DAILY" ? addDays : recurrence === "WEEKLY" ? addWeeks : addMonths;
-    let cursor = startAt;
-    while (occurrences.length < 52) {
-      cursor = step(cursor, 1);
-      if (cursor > until) break;
-      occurrences.push(cursor);
+    const until = schoolWallClockToInstant(recurrenceUntilRaw, "23:59:59");
+    const unit = recurrence === "DAILY" ? "day" : recurrence === "WEEKLY" ? "week" : "month";
+    for (let i = 1; occurrences.length < 52; i++) {
+      const ymd = addToSchoolDate(date, unit, i);
+      const start = schoolWallClockToInstant(ymd, startTime);
+      if (start > until) break;
+      occurrences.push({ start, end: schoolWallClockToInstant(ymd, endTime) });
     }
   }
-  const duration = endAt.getTime() - startAt.getTime();
-  const recurrenceUntil = recurrenceUntilRaw ? new Date(recurrenceUntilRaw) : null;
+  const recurrenceUntil = recurrenceUntilRaw ? schoolWallClockToInstant(recurrenceUntilRaw, "12:00") : null;
 
   // The first occurrence has to exist before the rest can reference it as
   // recurrenceParentId, but everything after that shares the exact same
   // parentId — so only the first insert needs its own round trip; the
   // remaining (up to 51) occurrences batch into one createMany.
-  const [firstStart, ...restStarts] = occurrences;
+  const [first, ...rest] = occurrences;
   const created: PersonalEvent = await db.personalEvent.create({
     data: {
       userId: user.id,
       title,
-      startAt: firstStart,
-      endAt: new Date(firstStart.getTime() + duration),
+      startAt: first.start,
+      endAt: first.end,
       location,
       description,
       categoryId,
@@ -65,13 +67,13 @@ export async function createPersonalEventAction(_prev: ActionState, formData: Fo
       recurrenceUntil,
     },
   });
-  if (restStarts.length > 0) {
+  if (rest.length > 0) {
     await db.personalEvent.createMany({
-      data: restStarts.map((occStart) => ({
+      data: rest.map((occ) => ({
         userId: user.id,
         title,
-        startAt: occStart,
-        endAt: new Date(occStart.getTime() + duration),
+        startAt: occ.start,
+        endAt: occ.end,
         location,
         description,
         categoryId,

@@ -7,6 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeRange } from "@/lib/format";
 import { toSchoolZone } from "@/lib/school-time";
+import { formatRolePay } from "@/lib/role-pay";
+import { getClassOverlap, describeClassOverlap } from "@/lib/bell-schedule";
 import { format } from "date-fns";
 import { ChecklistSection } from "./checklist-section";
 import { AttachmentsSection } from "./attachments-section";
@@ -24,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ clubId: s
 
 export default async function DirectorEventDetailPage({ params }: { params: Promise<{ clubId: string; eventId: string }> }) {
   const { clubId, eventId } = await params;
-  await getDirectorContext(clubId);
+  const { club } = await getDirectorContext(clubId);
 
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -41,6 +43,8 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
   });
   if (!event || event.clubId !== clubId) notFound();
 
+  const classOverlap = await getClassOverlap(club.schoolId, event.startAt, event.endAt);
+
   const existingHours = await db.serviceHourRecord.findMany({ where: { eventId } });
   const hoursByUserId = new Map(existingHours.map((h) => [h.userId, h.hours]));
 
@@ -54,6 +58,9 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
             <p className="mt-1 text-[15px] text-text-secondary">
               {format(toSchoolZone(event.startAt), "EEEE, MMMM d, yyyy")} · {formatTimeRange(event.startAt, event.endAt)}
             </p>
+            {classOverlap.length > 0 && (
+              <p className="mt-1 text-sm font-medium text-warning">🏫 During class: {describeClassOverlap(classOverlap)}</p>
+            )}
           </div>
           <Badge tone={event.status === "FINALIZED" ? "success" : event.status === "CANCELLED" ? "neutral" : "accent"}>{event.status}</Badge>
         </div>
@@ -94,6 +101,7 @@ export default async function DirectorEventDetailPage({ params }: { params: Prom
               name: r.name,
               capacity: r.capacity,
               waitlistCapacity: r.waitlistCapacity,
+              pay: formatRolePay(r.payCents, r.payNote),
               people: event.registrations
                 .filter((reg) => reg.roleId === r.id)
                 .map((reg) => ({

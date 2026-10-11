@@ -46,7 +46,7 @@ export default async function DiscoverPage({
       <h1 className="text-2xl font-bold tracking-tight text-text-primary">Discover Clubs</h1>
       <p className="mt-1 text-[15px] text-text-secondary">Find clubs at {viewer.school?.name}.</p>
 
-      <form action="/discover" method="get" className="mt-5">
+      <form action="/discover" method="get" className="mt-5" data-tour="discover-search">
         <input
           type="search"
           name="q"

@@ -7,6 +7,7 @@ import { Badge, ColorDot } from "@/components/ui/badge";
 import { LinkButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatEventDate } from "@/lib/format";
+import { computeStaffing } from "@/lib/staffing";
 import { MarkCompletedButton } from "./mark-completed-button";
 
 const STATUS_TONE: Record<string, "neutral" | "accent" | "success" | "warning"> = {
@@ -56,11 +57,18 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight text-text-primary">Events</h1>
-        <LinkButton href={`/director/${clubId}/events/new`} size="sm">
-          ➕ Create
-        </LinkButton>
+        <div className="flex items-center gap-2">
+          <div data-tour="events-staffing">
+            <LinkButton href={`/director/${clubId}/coverage`} size="sm" variant="secondary">
+              Staffing board
+            </LinkButton>
+          </div>
+          <LinkButton href={`/director/${clubId}/events/new`} size="sm">
+            ➕ Create
+          </LinkButton>
+        </div>
       </div>
 
       {events.length === 0 ? (
@@ -70,10 +78,14 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
       ) : (
         <div className="mt-6 space-y-2">
           {events.map(({ event: e, occurrenceCount }) => {
+            const staffing = computeStaffing(e);
             const isFull = e.maxParticipants != null && e._count.registrations >= e.maxParticipants;
-            const rolesFull = e.roles.length > 0 && e.roles.every((r) => r._count.registrations >= r.capacity);
+            const rolesFull = staffing.kind === "roles" && staffing.fully;
+            // Everything an event needs is covered — green, so the ones that
+            // still need people stand out by comparison.
+            const covered = e.status === "SCHEDULED" && staffing.fully;
             return (
-            <Card key={e.id}>
+            <Card key={e.id} className={covered ? "border-success/60 bg-success/10" : undefined}>
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <Link href={`/director/${clubId}/events/${e.id}`} className="min-w-0 flex-1">
@@ -90,6 +102,7 @@ export default async function DirectorEventsPage({ params }: { params: Promise<{
                     <Badge tone={STATUS_TONE[e.status]}>{e.status}</Badge>
                     {isFull && <Badge tone="success">Full</Badge>}
                     {rolesFull && <Badge tone="success">Roles Filled</Badge>}
+                    {e.status === "SCHEDULED" && staffing.kind === "roles" && !staffing.fully && <Badge tone="warning">Needs {staffing.open} more</Badge>}
                   </div>
                 </div>
                 {e.status === "SCHEDULED" && e.startAt < new Date() && (

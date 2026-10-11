@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { MessageCircle } from "lucide-react";
 import { getViewer } from "@/lib/viewer";
 import { db } from "@/lib/db";
 import { ColorDot } from "@/components/ui/badge";
@@ -105,8 +106,12 @@ export default async function ClubProfilePage({ params }: { params: Promise<{ sl
           <div className="flex shrink-0 flex-col items-end gap-2">
             <JoinClubButton clubId={club.id} status={(myMembership?.status as "ACTIVE" | "PENDING") ?? "NONE"} />
             {myMembership?.status === "ACTIVE" && (
-              <Link href={`/clubs/${club.slug}/chat`} className="text-xs font-medium text-accent">
-                💬 Chat
+              <Link
+                href={`/clubs/${club.slug}/chat`}
+                className="group inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-on-accent shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-lg)] active:translate-y-0"
+              >
+                <MessageCircle className="h-4 w-4 transition-transform duration-200 group-hover:scale-125" strokeWidth={2.25} />
+                Chat
               </Link>
             )}
           </div>

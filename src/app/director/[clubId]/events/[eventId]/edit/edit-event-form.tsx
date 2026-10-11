@@ -1,5 +1,6 @@
 "use client";
 
+import { ClassOverlapNotice } from "../../class-overlap-notice";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { updateEventAction } from "@/app/actions/director-events";
@@ -10,6 +11,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EVENT_CATEGORIES, AUTO_APPROVED_EVENT_CATEGORIES } from "@/lib/constants";
 import { format } from "date-fns";
+import { toSchoolZone } from "@/lib/school-time";
+import { dollarsFromCents, parsePayDollars } from "@/lib/role-pay";
+import type { SavedRole } from "@/app/actions/role-templates";
+import { RolePayFields, SavedRolesBar, useSavedRoles } from "../../role-extras";
 
 type EventForEdit = {
   id: string;
@@ -51,6 +56,8 @@ type RoleDraft = {
   capacity: string;
   allowedGrades: string[];
   waitlistCapacity: string;
+  pay: string;
+  payNote: string;
   filledCount: number;
 };
 
@@ -63,6 +70,7 @@ export function EditEventForm({
   gradeLevels,
   contacts = [],
   roles: initialRoles,
+  savedRoles = [],
 }: {
   event: EventForEdit;
   members: { id: string; name: string }[];
@@ -71,7 +79,18 @@ export function EditEventForm({
   groups?: { id: string; name: string; color: string; memberIds: string[] }[];
   gradeLevels: string[];
   contacts?: { id: string; name: string }[];
-  roles: { id: string; name: string; capacity: number; allowedGrades: string[] | null; waitlistCapacity: number | null; filledCount: number }[];
+  roles: {
+    id: string;
+    name: string;
+    capacity: number;
+    allowedGrades: string[] | null;
+    waitlistCapacity: number | null;
+    payCents: number | null;
+    payNote: string | null;
+    filledCount: number;
+  }[];
+  /** Roles this club saved from earlier events, ready to drop in. */
+  savedRoles?: SavedRole[];
 }) {
   const router = useRouter();
   const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE">(event.visibility);
@@ -79,7 +98,7 @@ export function EditEventForm({
   const [assigned, setAssigned] = useState<string[]>([]);
   const [awardsServiceHours, setAwardsServiceHours] = useState(event.awardsServiceHours);
   const [waitlistEnabled, setWaitlistEnabled] = useState(event.waitlistEnabled);
-  const [endsNextDay, setEndsNextDay] = useState(() => format(event.startAt, "yyyy-MM-dd") !== format(event.endAt, "yyyy-MM-dd"));
+  const [endsNextDay, setEndsNextDay] = useState(() => format(toSchoolZone(event.startAt), "yyyy-MM-dd") !== format(toSchoolZone(event.endAt), "yyyy-MM-dd"));
   const [allowedGrades, setAllowedGrades] = useState<string[]>(event.allowedGrades ?? [...gradeLevels]);
   const [category, setCategory] = useState(event.category);
   const [isFundraiser, setIsFundraiser] = useState(event.isFundraiser);
@@ -103,9 +122,12 @@ export function EditEventForm({
       capacity: String(r.capacity),
       allowedGrades: r.allowedGrades ?? [...gradeLevels],
       waitlistCapacity: r.waitlistCapacity ? String(r.waitlistCapacity) : "",
+      pay: dollarsFromCents(r.payCents),
+      payNote: r.payNote ?? "",
       filledCount: r.filledCount,
     }))
   );
+  const savedRoleShelf = useSavedRoles(event.clubId, savedRoles);
   const [roleInput, setRoleInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -138,9 +160,47 @@ export function EditEventForm({
     }
     setRoles((prev) => [
       ...prev,
-      { key: crypto.randomUUID(), id: null, name, capacity: "1", allowedGrades: [...gradeLevels], waitlistCapacity: "", filledCount: 0 },
+      { key: crypto.randomUUID(), id: null, name, capacity: "1", allowedGrades: [...gradeLevels], waitlistCapacity: "", pay: "", payNote: "", filledCount: 0 },
     ]);
     setRoleInput("");
+  }
+
+  function addSavedRole(t: SavedRole) {
+    if (roles.some((r) => r.name.toLowerCase() === t.name.toLowerCase())) return;
+    const grades = (t.allowedGrades?.split(",") ?? []).filter((g) => gradeLevels.includes(g));
+    setRoles((prev) => [
+      ...prev,
+      {
+        key: crypto.randomUUID(),
+        id: null,
+        name: t.name,
+        capacity: String(t.capacity),
+        allowedGrades: grades.length > 0 ? grades : [...gradeLevels],
+        waitlistCapacity: t.waitlistCapacity ? String(t.waitlistCapacity) : "",
+        pay: dollarsFromCents(t.payCents),
+        payNote: t.payNote ?? "",
+        filledCount: 0,
+      },
+    ]);
+  }
+
+  function setRolePay(key: string, pay: string) {
+    setRoles((prev) => prev.map((r) => (r.key === key ? { ...r, pay } : r)));
+  }
+
+  function setRolePayNote(key: string, payNote: string) {
+    setRoles((prev) => prev.map((r) => (r.key === key ? { ...r, payNote } : r)));
+  }
+
+  function saveRole(r: RoleDraft) {
+    return savedRoleShelf.save({
+      name: r.name,
+      capacity: Math.max(1, Number(r.capacity) || 1),
+      allowedGrades: r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : null,
+      waitlistCapacity: r.waitlistCapacity.trim() ? Number(r.waitlistCapacity) : null,
+      payCents: parsePayDollars(r.pay),
+      payNote: r.payNote.trim() || null,
+    });
   }
 
   function removeRole(key: string) {
@@ -196,6 +256,8 @@ export function EditEventForm({
       formData.append("roleCapacity", String(Math.max(1, Number(r.capacity) || 1)));
       formData.append("roleAllowedGrades", r.allowedGrades.length < gradeLevels.length ? r.allowedGrades.join(",") : "");
       formData.append("roleWaitlistCapacity", r.waitlistCapacity.trim());
+      formData.append("rolePay", r.pay.trim());
+      formData.append("rolePayNote", r.payNote.trim());
     });
     if (allowedGrades.length > 0 && allowedGrades.length < gradeLevels.length) {
       formData.set("allowedGrades", allowedGrades.join(","));
@@ -259,16 +321,16 @@ export function EditEventForm({
           <p className="text-sm font-semibold text-text-primary">Schedule</p>
           <div>
             <Label htmlFor="date">Date</Label>
-            <Input id="date" name="date" type="date" defaultValue={format(event.startAt, "yyyy-MM-dd")} required />
+            <Input id="date" name="date" type="date" defaultValue={format(toSchoolZone(event.startAt), "yyyy-MM-dd")} required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="startTime">Start time</Label>
-              <Input id="startTime" name="startTime" type="time" defaultValue={format(event.startAt, "HH:mm")} required />
+              <Input id="startTime" name="startTime" type="time" defaultValue={format(toSchoolZone(event.startAt), "HH:mm")} required />
             </div>
             <div>
               <Label htmlFor="endTime">End time</Label>
-              <Input id="endTime" name="endTime" type="time" defaultValue={format(event.endAt, "HH:mm")} required />
+              <Input id="endTime" name="endTime" type="time" defaultValue={format(toSchoolZone(event.endAt), "HH:mm")} required />
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-text-secondary">
@@ -281,6 +343,7 @@ export function EditEventForm({
             />
             Ends the next day (overnight event)
           </label>
+          <ClassOverlapNotice clubId={event.clubId} />
           {event.isRecurring && (
             <p className="text-xs text-text-muted">
               This is one occurrence of a recurring series. Changing the date/time here only moves this occurrence — use Cancel on the
@@ -450,6 +513,7 @@ export function EditEventForm({
             Add roles like &ldquo;Setup Crew&rdquo; or &ldquo;Referee&rdquo; with how many people you need for each. If you add any
             roles, everyone who joins has to pick one — that way you can see exactly which roles still need people.
           </p>
+          <SavedRolesBar saved={savedRoleShelf.saved} usedNames={roles.map((r) => r.name)} onUse={addSavedRole} onDelete={savedRoleShelf.remove} />
           <div className="flex gap-2">
             <Input
               value={roleInput}
@@ -494,6 +558,14 @@ export function EditEventForm({
                       </button>
                     )}
                   </div>
+                  <RolePayFields
+                    idPrefix={`role-${r.key}`}
+                    pay={r.pay}
+                    payNote={r.payNote}
+                    onPayChange={(v) => setRolePay(r.key, v)}
+                    onPayNoteChange={(v) => setRolePayNote(r.key, v)}
+                    onSave={() => saveRole(r)}
+                  />
                   <div className="pl-0.5">
                     <p className="mb-1 text-xs text-text-muted">Grades allowed for this role — tap to toggle which ones can join it:</p>
                     <div className="flex flex-wrap items-center gap-1.5">

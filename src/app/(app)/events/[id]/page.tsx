@@ -11,6 +11,8 @@ import { ShareButton } from "@/components/share-button";
 import { BackButton } from "@/components/ui/back-button";
 import { formatTimeRange } from "@/lib/format";
 import { toSchoolZone } from "@/lib/school-time";
+import { formatRolePay } from "@/lib/role-pay";
+import { getClassOverlap, describeClassOverlap } from "@/lib/bell-schedule";
 import { parseReminderOffsets, isSchoolAdminTier } from "@/lib/constants";
 import { format } from "date-fns";
 
@@ -41,6 +43,8 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
   });
 
   if (!event) notFound();
+
+  const classOverlap = await getClassOverlap(event.club.schoolId, event.startAt, event.endAt);
 
   const isMember = viewer.memberships.some((m) => m.clubId === event.clubId);
   // Directors/admins at the same school can always view an event's details,
@@ -95,6 +99,9 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
       <Card className="mt-5">
         <CardContent className="p-5 space-y-4">
           <InfoRow icon="📅" label={format(toSchoolZone(event.startAt), "EEEE, MMMM d, yyyy")} sub={formatTimeRange(event.startAt, event.endAt)} />
+          {classOverlap.length > 0 && (
+            <InfoRow icon="🏫" label="During class time" sub={`${describeClassOverlap(classOverlap)} — you'd miss part of these classes, so check with your teachers.`} />
+          )}
           {(event.building || event.room || event.address) && (
             <InfoRow icon="📍" label={[event.building, event.room].filter(Boolean).join(", ") || "Location"} sub={event.address ?? undefined} />
           )}
@@ -120,6 +127,9 @@ export default async function EventDetailsPage({ params }: { params: Promise<{ i
                 <div key={r.id} className="flex items-center justify-between text-sm">
                   <span className="text-text-primary">
                     {r.name}
+                    {formatRolePay(r.payCents, r.payNote) && (
+                      <span className="ml-1.5 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">{formatRolePay(r.payCents, r.payNote)}</span>
+                    )}
                     {roleGrades && <span className="ml-1.5 text-xs text-text-muted">({roleGrades.join(", ")} only)</span>}
                   </span>
                   <span className={roleFull ? "font-medium text-success" : "text-text-secondary"}>

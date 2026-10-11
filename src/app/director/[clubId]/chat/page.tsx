@@ -6,8 +6,9 @@ import { ChatView, type MemberOption, type ChatRole } from "@/components/chat/ch
 
 export const metadata: Metadata = { title: "Chat" };
 
-export default async function DirectorChatPage({ params }: { params: Promise<{ clubId: string }> }) {
+export default async function DirectorChatPage({ params, searchParams }: { params: Promise<{ clubId: string }>; searchParams: Promise<{ channel?: string }> }) {
   const { clubId } = await params;
+  const { channel: channelParam } = await searchParams;
   const ctx = await getChatContext(clubId);
   if (!ctx.authorized) notFound();
 
@@ -40,6 +41,8 @@ export default async function DirectorChatPage({ params }: { params: Promise<{ c
           memberships: c.memberships.map((m) => ({ id: m.id, userId: m.userId, status: m.status as "ACTIVE" | "PENDING", canPost: m.canPost, user: m.user })),
         }))}
         members={members}
+        initialChannelId={channelParam}
+        teacherMessaging={{ off: ctx.teacherMessagingOff, viewerIsStaff: ctx.viewerIsStaff }}
       />
     </div>
   );

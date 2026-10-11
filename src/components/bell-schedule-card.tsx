@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { getTodaysSchedule, currentSlotIndex } from "@/lib/bell-schedule";
+import { getTodaysSchedule, currentSlotIndex, formatSlotTime } from "@/lib/bell-schedule";
 import { format } from "date-fns";
 import { schoolNow } from "@/lib/school-time";
 
@@ -41,7 +41,7 @@ export async function BellScheduleCard({ schoolId }: { schoolId: string }) {
                 {slot.isBlock ? `Block ${slot.letter ?? ""}`.trim() : slot.name}
               </span>
               <span className="text-xs tabular-nums">
-                {slot.start === slot.end ? slot.start : `${slot.start} – ${slot.end}`}
+                {slot.start === slot.end ? formatSlotTime(slot.start) : `${formatSlotTime(slot.start)} – ${formatSlotTime(slot.end)}`}
               </span>
             </div>
           ))}

@@ -16,6 +16,7 @@ const TYPE_ICON: Record<string, string> = {
   SERVICE_HOURS: "⏱",
   ACHIEVEMENT: "🏅",
   PLATFORM: "🛠",
+  SCHOOL_ANNOUNCEMENT: "📣",
 };
 
 export const metadata: Metadata = { title: "Notifications" };

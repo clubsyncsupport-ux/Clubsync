@@ -17,7 +17,15 @@ export type NavItem = {
   exact?: boolean;
   /** Small red dot on the icon — e.g. "you have a pending join request to review." */
   badge?: boolean;
+  /** Left out of the phone's bottom bar (which only fits about six tabs) — the
+   * item still shows in the desktop sidebar. */
+  desktopOnly?: boolean;
 };
+
+// Stable hook for the guided tour to find a link by what it says.
+export function navTourId(label: string) {
+  return `nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
 
 function isActive(pathname: string | null, item: NavItem) {
   if (!pathname) return false;
@@ -36,6 +44,7 @@ export function DesktopNavLinks({ items }: { items: NavItem[] }) {
           <Link
             key={item.href}
             href={item.href}
+            data-tour={navTourId(item.label)}
             className={cn(
               "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors",
               active ? "bg-accent-soft text-accent-soft-text" : "text-text-secondary hover:bg-surface-2 hover:text-text-primary"
@@ -53,8 +62,9 @@ export function DesktopNavLinks({ items }: { items: NavItem[] }) {
   );
 }
 
-export function BottomNavLinks({ items }: { items: NavItem[] }) {
+export function BottomNavLinks({ items: allItems }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const items = allItems.filter((item) => !item.desktopOnly);
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 flex transform-gpu border-t border-border bg-surface-1/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)] will-change-transform md:hidden">
       {items.map((item) => {
@@ -64,6 +74,7 @@ export function BottomNavLinks({ items }: { items: NavItem[] }) {
           <Link
             key={item.href}
             href={item.href}
+            data-tour={navTourId(item.label)}
             className={cn(
               "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
               active ? "text-accent" : "text-text-muted"

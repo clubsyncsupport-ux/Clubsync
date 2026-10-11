@@ -48,7 +48,7 @@ export default async function ServiceHoursPage() {
         </Link>
       </div>
 
-      <Card className="mt-5">
+      <Card className="mt-5" data-tour="hours-summary">
         <CardContent className="flex flex-col items-center p-6">
           <ProgressRing value={Math.round(totalHours * 10) / 10} goal={viewer.serviceHourGoal} />
           <div className="mt-4 grid w-full grid-cols-3 gap-2 text-center">

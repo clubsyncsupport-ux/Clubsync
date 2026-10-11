@@ -8,6 +8,7 @@ import { SchoolBasicInfoForm } from "./school-basic-info-form";
 import { AssignSchoolAdminForm } from "./assign-school-admin-form";
 import { SchoolAdminList } from "./school-admin-list";
 import { DeleteSchoolButton } from "./delete-school-button";
+import { TeacherMessagingCard } from "@/components/teacher-messaging-card";
 
 export async function generateMetadata({ params }: { params: Promise<{ schoolId: string }> }): Promise<Metadata> {
   const { schoolId } = await params;
@@ -64,6 +65,10 @@ export default async function AdminSchoolDetailPage({ params }: { params: Promis
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4">
+        <TeacherMessagingCard schoolId={school.id} enabled={school.teacherMessaging} />
+      </div>
 
       <Card className="mt-4">
         <CardContent className="p-5">

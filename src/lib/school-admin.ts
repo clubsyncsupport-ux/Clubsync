@@ -24,7 +24,7 @@ export const getSchoolAdminContext = cache(async (schoolId: string) => {
   const isAuthorized = isSchoolAdminHere || isPlatformAdmin;
   if (!isAuthorized) notFound();
 
-  return { school, user: authUser, isPlatformAdmin, platformRole: me.platformRole };
+  return { school, user: authUser, isPlatformAdmin, platformRole: me.platformRole, tutorialState: me.tutorialState };
 });
 
 // For actions/pages that start from a club (or another school-owned resource)

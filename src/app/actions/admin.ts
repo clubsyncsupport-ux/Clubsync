@@ -8,6 +8,7 @@ import crypto from "crypto";
 import { requireAdmin, logAudit } from "@/lib/admin";
 import { getSchoolAdminContextForClub, requireSchoolAccessForUser, requireSchoolAccessForStaffApproval } from "@/lib/school-admin";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 import { isSchoolAdminTier, SCHOOL_ADMIN_TIER_ROLES, type PlatformRole } from "@/lib/constants";
 
 // ---- Users ----
@@ -285,6 +286,7 @@ export async function transferClubOwnershipAction(clubId: string, newDirectorUse
       create: { userId: newDirectorUserId, clubId, role: "DIRECTOR", status: "ACTIVE" },
     }),
   ]);
+  await ensureDefaultChannels(clubId);
   await logAudit(user.id, "TRANSFER_OWNERSHIP", "Club", clubId, undefined, { newDirectorUserId });
   revalidateClubPaths(club.id, school.id, isPlatformAdmin);
 }
@@ -324,6 +326,8 @@ export async function mergeClubsAction(sourceClubId: string, targetClubId: strin
     await tx.club.update({ where: { id: sourceClubId }, data: { status: "MERGED", mergedIntoId: targetClubId } });
   });
 
+  // The members who moved over join the target club's channels.
+  await ensureDefaultChannels(targetClubId);
   await logAudit(user.id, "MERGE_CLUBS", "Club", sourceClubId, undefined, { mergedIntoId: targetClubId });
   revalidatePath("/admin/clubs");
   if (!isPlatformAdmin) {

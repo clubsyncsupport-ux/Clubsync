@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { requireUser } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { checkAndUnlockAchievements } from "@/lib/achievements";
 import { slugify } from "@/lib/slugify";
+import { ensureDefaultChannels } from "@/lib/default-channels";
 import { CLUB_COLOR_PALETTE } from "@/lib/constants";
 
 export type CreateClubState = { error: string | null };
@@ -67,6 +69,8 @@ export async function createClubAction(_prev: CreateClubState, formData: FormDat
     },
   });
 
+  await ensureDefaultChannels(club.id);
+
   if (supervisor) {
     await db.notification.create({
       data: {
@@ -122,6 +126,10 @@ export async function joinClubAction(clubId: string): Promise<{ error: string | 
     update: { status: club.requiresApproval ? "PENDING" : "ACTIVE" },
     create: { userId: me.id, clubId, role: "MEMBER", status: club.requiresApproval ? "PENDING" : "ACTIVE" },
   });
+
+  // Joining a club that doesn't need approval puts you in its General and
+  // Announcements channels; it happens after the response so Join stays instant.
+  if (!club.requiresApproval) after(() => ensureDefaultChannels(clubId));
 
   await checkAndUnlockAchievements(me.id);
 

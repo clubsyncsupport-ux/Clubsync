@@ -18,6 +18,8 @@ type RoleWithRoster = {
   name: string;
   capacity: number;
   waitlistCapacity: number | null;
+  /** e.g. "$25 · per game" — null for an unpaid role. */
+  pay: string | null;
   people: RosterPerson[];
 };
 
@@ -43,7 +45,10 @@ export function RolesRoster({ roles }: { roles: RoleWithRoster[] }) {
               onClick={() => setExpandedId(expanded ? null : r.id)}
               className="flex w-full items-center justify-between px-5 py-3 text-left text-sm hover:bg-surface-2"
             >
-              <span className="text-text-primary">{r.name}</span>
+              <span className="text-text-primary">
+                {r.name}
+                {r.pay && <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">{r.pay}</span>}
+              </span>
               <span className="flex items-center gap-2">
                 <span className={roleFull ? "font-medium text-success" : "text-text-secondary"}>
                   {filled} / {r.capacity} {roleFull ? "✓ Filled" : "filled"}
